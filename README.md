@@ -343,8 +343,8 @@ dsh container  →  LiteLLM (port 4000)  →  oMLX (port 8000)  →  models
 
 | Tier | Model | Active params | When |
 |---|---|---|---|
-| SIMPLE | Qwen3-Coder-30B-A3B-Instruct-4bit | 3B | Greetings, simple lookups |
-| MEDIUM | Qwen3-Coder-30B-A3B-Instruct-4bit | 3B | Standard coding tasks |
+| SIMPLE | Qwen3-VL-30B-A3B-Instruct-4bit | 3B | Greetings, simple lookups |
+| MEDIUM | Qwen3-VL-30B-A3B-Instruct-4bit | 3B | Standard coding tasks |
 | COMPLEX | Qwen3.8-27B-OptiQ-4bit | 27B | Architecture, multi-file |
 | REASONING | Qwen3.6-35B-A3B-4bit | 3B | Deep analysis (thinking mode) |
 
@@ -361,9 +361,9 @@ also advertised for manual per-session selection in the dsh UI.
 
 ### Fallbacks
 
-If a model fails, LiteLLM falls back: `smart-router` → `Qwen3-Coder-30B-A3B`,
-`Qwen3.8-27B-OptiQ` → `Qwen3-Coder-30B-A3B`, `Qwen3.6-35B-A3B` →
-`Qwen3.8-27B-OptiQ`.
+If a model fails, LiteLLM falls back: `smart-router` → `Qwen3-VL-30B-A3B`,
+`Qwen3-VL-30B-A3B` → `Qwen3.8-27B-OptiQ`, `Qwen3.8-27B-OptiQ` →
+`Qwen3-VL-30B-A3B`, `Qwen3.6-35B-A3B` → `Qwen3.8-27B-OptiQ`.
 
 ### Config
 
@@ -399,19 +399,16 @@ Models fixed (backup at `tokenizer_config.json.bak`):
 
 | Model | tool_parser_type | Status |
 |---|---|---|
+| Qwen3-VL-30B-A3B-Instruct-4bit | `qwen3_coder` | works (fix applied) |
 | Qwen3.8-27B-OptiQ-4bit | `qwen3_coder` | works (was already set) |
 | Qwen3.6-35B-A3B-4bit | `qwen3_coder` | works (fix applied) |
-| Qwen3-Coder-30B-A3B-Instruct-4bit | `qwen3_coder` | set but not effective (different tokenizer; returns text) |
 | Qwen3-Next-80B-A3B-Instruct-MLX-4bit | `qwen3_coder` | set (not yet verified) |
 
-**Caveat:** Qwen3-Coder-30B uses a different tokenizer (token IDs 151643/151645
-vs 248044/248046) and still returns text-formatted tool calls despite the
-`tool_parser_type` setting. The router's COMPLEX and REASONING tiers
-(Qwen3.8-27B-OptiQ and Qwen3.6-35B-A3B) both work correctly. If the router
-selects the SIMPLE/MEDIUM tier (Qwen3-Coder) for a tool-requiring task, tool
-calls will appear as text. To avoid this, either:
-- Change the SIMPLE/MEDIUM tier in `litellm-config.yaml` to a working model.
-- Or accept that simple tasks (greetings, lookups) rarely need tools.
+**Note:** Qwen3-Coder-30B-A3B-Instruct-4bit was removed from the setup because
+it uses a different tokenizer (token IDs 151643/151645 vs 248044/248046) and
+returns text-formatted tool calls despite the `tool_parser_type` setting. The
+SIMPLE/MEDIUM tiers now use Qwen3-VL-30B-A3B-Instruct-4bit, which returns
+structured `tool_calls` correctly and adds vision capability.
 
 **After applying the fix, restart oMLX** so it reloads model configs.
 

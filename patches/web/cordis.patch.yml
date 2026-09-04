@@ -16,8 +16,8 @@
       - id: smart-router
         name: smart-router (auto-routing)
         contextWindow: 262144
-      - id: Qwen3-Coder-30B-A3B-Instruct-4bit
-        name: Qwen3-Coder-30B-A3B (fast coder)
+      - id: Qwen3-VL-30B-A3B-Instruct-4bit
+        name: Qwen3-VL-30B-A3B (vision + tools)
         contextWindow: 262144
       - id: Qwen3.8-27B-OptiQ-4bit
         name: Qwen3.8-27B-OptiQ
