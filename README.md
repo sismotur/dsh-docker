@@ -382,6 +382,52 @@ The oMLX server config (`~/.omlx/settings.json`) was tuned for this setup:
 `burst_decode_mode: fast`, `max_concurrent_requests: 3`,
 `max_context_window: 262144`. Backup at `~/.omlx/settings.json.bak.*`.
 
+### oMLX tool parser fix (structured tool calls)
+
+dsh sends the OpenAI `tools` parameter and expects structured `tool_calls` in
+the response. Without `tool_parser_type` set in a model's
+`tokenizer_config.json`, oMLX returns text-formatted tool calls
+(`<function=bash>...`) as content with `finish_reason: stop` — dsh cannot
+parse or execute them, so tools appear as raw text in the chat.
+
+The fix: add `"tool_parser_type": "qwen3_coder"` to each model's
+`tokenizer_config.json` (at `~/.omlx/models/<model>/tokenizer_config.json`).
+This tells oMLX to parse the model's text output into structured
+`tool_calls` with `finish_reason: tool_calls`.
+
+Models fixed (backup at `tokenizer_config.json.bak`):
+
+| Model | tool_parser_type | Status |
+|---|---|---|
+| Qwen3.8-27B-OptiQ-4bit | `qwen3_coder` | works (was already set) |
+| Qwen3.6-35B-A3B-4bit | `qwen3_coder` | works (fix applied) |
+| Qwen3-Coder-30B-A3B-Instruct-4bit | `qwen3_coder` | set but not effective (different tokenizer; returns text) |
+| Qwen3-Next-80B-A3B-Instruct-MLX-4bit | `qwen3_coder` | set (not yet verified) |
+
+**Caveat:** Qwen3-Coder-30B uses a different tokenizer (token IDs 151643/151645
+vs 248044/248046) and still returns text-formatted tool calls despite the
+`tool_parser_type` setting. The router's COMPLEX and REASONING tiers
+(Qwen3.8-27B-OptiQ and Qwen3.6-35B-A3B) both work correctly. If the router
+selects the SIMPLE/MEDIUM tier (Qwen3-Coder) for a tool-requiring task, tool
+calls will appear as text. To avoid this, either:
+- Change the SIMPLE/MEDIUM tier in `litellm-config.yaml` to a working model.
+- Or accept that simple tasks (greetings, lookups) rarely need tools.
+
+**After applying the fix, restart oMLX** so it reloads model configs.
+
+```sh
+# Apply the fix to a model:
+python3 -c "
+import json
+p = '$HOME/.omlx/models/<model>/tokenizer_config.json'
+d = json.load(open(p))
+d['tool_parser_type'] = 'qwen3_coder'
+json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)
+print('done')
+"
+# Then restart oMLX (quit the app and relaunch).
+```
+
 ## oMLX config
 
 The backup of the original bare-metal dsh config is in `~/dsh-omlx-backup/`.
