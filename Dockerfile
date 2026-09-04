@@ -17,6 +17,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        socat git curl jq less ripgrep openssh-client \
     && rm -rf /var/lib/apt/lists/*
+# No-op xdg-open: dsh calls xdg-open when a file link is clicked in chat.
+# Containers cannot reach the host GUI, so a real opener is impossible; this
+# shim exits cleanly instead of raising spawn ENOENT.
+RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/xdg-open && chmod +x /usr/local/bin/xdg-open
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml
