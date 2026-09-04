@@ -3,19 +3,42 @@
 # Usage:
 #   ./run-dsh.sh seed              # seed oMLX patches + pnpm store (once)
 #   ./run-dsh.sh web               # web UI on http://127.0.0.1:8080
+#   ./run-dsh.sh web <project>     # web UI, with <project> mounted at /workspace
 #   ./run-dsh.sh headless "..."    # one-shot headless job
+#   ./run-dsh.sh headless "..." <project>  # headless, with <project> at /workspace
 #   ./run-dsh.sh plugin web add <pkg>   # manage plugins (pnpm) in a profile
 set -e
 cd "$(dirname "$0")"
+# Mount a project dir at /workspace if a path argument is given.
+# Returns the -v flag string (or empty).
+mount_project() {
+  p="$1"
+  if [ -z "$p" ]; then
+    echo ""
+    return
+  fi
+  if ! [ -d "$p" ]; then
+    echo "Error: project path not found: $p" >&2
+    exit 1
+  fi
+  abs=$(cd "$p" && pwd)
+  echo "-v $abs:/workspace"
+}
+
 case "${1:-}" in
   web)
+    MNT=$(mount_project "${2:-}")
     # The web entrypoint runs dsh on 127.0.0.1 (safety) and socat-proxies
     # 0.0.0.0:8080 so Docker can publish the port. --service-ports publishes.
-    docker compose run --rm --service-ports dsh-web
+    # shellcheck disable=SC2086
+    docker compose run --rm --service-ports $MNT dsh-web
     ;;
   headless)
     shift
-    docker compose run --rm dsh-headless --profile headless "$@"
+    JOB="$1"; shift
+    MNT=$(mount_project "${1:-}")
+    # shellcheck disable=SC2086
+    docker compose run --rm $MNT dsh-headless --profile headless "$JOB"
     ;;
   plugin)
     shift

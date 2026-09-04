@@ -85,11 +85,13 @@ kernel (gVisor), blocking escapes even on a kernel CVE.
 
 ```sh
 cd ~/dsh-docker
-cp .env.example .env        # edit .env, set DEEPSEEK_API_KEY
+cp .env.example .env        # edit .env, set DEEPSEEK_API_KEY and git identity
 ```
 
-The key is passed to the container via compose `environment`; it is never
-baked into the image. `.env` is gitignored.
+The API key is passed to the container via compose `environment`; it is never
+baked into the image. `.env` is gitignored. Set `GIT_AUTHOR_NAME` /
+`GIT_AUTHOR_EMAIL` (and the `COMMITTER` equivalents) too if you want the agent
+to commit with your identity — the host `~/.gitconfig` is not mounted.
 
 ### 2. Create the workspace bind mount
 
@@ -147,7 +149,8 @@ dsh has no background daemon. Each invocation is an ephemeral container
 ### Web profile (long-running, interactive)
 
 ```sh
-./run-dsh.sh web        # serves the UI at http://127.0.0.1:8080
+./run-dsh.sh web                           # serves the UI at http://127.0.0.1:8080
+./run-dsh.sh web ~/Development/myproject   # same, with myproject mounted at /workspace
 ```
 
 Runs in the foreground. Stop it with `Ctrl+C` in that terminal; the
@@ -157,6 +160,7 @@ container exits and is removed automatically.
 
 ```sh
 ./run-dsh.sh headless "run the tests"
+./run-dsh.sh headless "run the tests" ~/Development/myproject   # with project mounted
 ```
 
 Runs one job, prints the result, and exits on its own. No manual stop
@@ -181,8 +185,53 @@ Re-run `./run-dsh.sh seed` after `down -v` to restore the oMLX patches into
 the recreated volume.
 
 The agent can only read/write `/workspace` (bind-mounted to
-`~/dsh-docker/workspace`) and `/data` (its private state volume). Put files
-you want it to touch in `~/dsh-docker/workspace` first.
+`~/dsh-docker/workspace` by default) and `/data` (its private state volume).
+Put files you want it to touch in the workspace first, or pass a project path
+(see below).
+
+## Working on existing projects
+
+To work on an existing repo, pass its path as an extra argument. The wrapper
+bind-mounts that directory at `/workspace`, so the agent works directly on
+your real repo — no clone, no copy, no syncing:
+
+```sh
+./run-dsh.sh web ~/Development/inventrip_api
+./run-dsh.sh headless "fix the login bug" ~/Development/inventrip_api
+```
+
+The agent sees the repo at `/workspace`, with full read/write access to your
+uncommitted changes, branches, and git history. Edits land on the real files
+on your host immediately.
+
+### Git identity
+
+The host `~/.gitconfig` is not mounted, so set git identity in `.env`:
+
+```sh
+GIT_AUTHOR_NAME="Your Name"
+GIT_AUTHOR_EMAIL="you@example.com"
+GIT_COMMITTER_NAME="Your Name"
+GIT_COMMITTER_EMAIL="you@example.com"
+```
+
+These are passed through to the container; commits made inside use your
+identity.
+
+### SSH keys for git push
+
+`~/.ssh` is deliberately not mounted. If the repo uses an SSH remote and you
+need `git push` from inside the container, generate a throwaway key or use an
+HTTPS remote with a token instead. Mounting host SSH keys would expose them
+to the agent.
+
+### Security tradeoffs
+
+Passing a project path expands the blast radius to that one directory —
+intentional, since you chose to expose it. All other hardening still applies
+(non-root, zero capabilities, read-only rootfs, no-new-privileges). Secrets
+inside the project (`.env`, credential files) become visible to the agent;
+consider whether you want that before mounting.
 
 ## Plugins
 
@@ -250,10 +299,10 @@ bare-metal config is in `~/dsh-omlx-backup/`.
 
 ## Files
 
-- `Dockerfile` — multi-stage build (dsh + pnpm + socat, build tools excluded).
+- `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools, build tools excluded).
 - `docker-compose.yml` — hardened service definitions.
 - `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy.
 - `patches/{web,headless}/cordis.patch.yml` — container-variant oMLX patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless / plugin).
-- `.env.example` — API key template.
+- `run-dsh.sh` — host wrapper (seed / web / headless / plugin; accepts a project path).
+- `.env.example` — API key and git identity template.

@@ -14,7 +14,8 @@ FROM node:25-slim AS runtime
 # 0.0.0.0 (RCE safety), binding only to 127.0.0.1 inside the container, which
 # Docker port forwarding cannot reach. socat bridges 0.0.0.0:8080 -> 127.0.0.1:8090.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends socat \
+    && apt-get install -y --no-install-recommends \
+       socat git curl jq less ripgrep openssh-client \
     && rm -rf /var/lib/apt/lists/*
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml

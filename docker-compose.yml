@@ -20,6 +20,10 @@ x-dsh-base: &dsh-base
   cpus: "4"
   environment:
     - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-}
+    - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-}
+    - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
+    - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
 
 services:
   dsh-web:
