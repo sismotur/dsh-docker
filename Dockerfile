@@ -7,7 +7,7 @@ FROM node:25-slim AS builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
-RUN npm i -g @deepseek-ai/dsh@0.1.1-rc.2
+RUN npm i -g @deepseek-ai/dsh@0.1.1-rc.2 pnpm
 
 FROM node:25-slim AS runtime
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
@@ -19,10 +19,17 @@ RUN chmod +x /usr/local/bin/seed-omlx.sh
 # resolution stays relative to the real package path.
 COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/local/bin/dsh
+# pnpm for dsh plugin management. Store + global bin live on the writable
+# DSH_HOME volume (not the read-only rootfs). Postinstall scripts are blocked
+# by default to neutralize rogue-plugin supply-chain execution at install time;
+# override with --config.ignore-scripts=false for a trusted native-addon build.
+RUN ln -s ../lib/node_modules/pnpm/bin/pnpm.mjs /usr/local/bin/pnpm
 # Writable DSH_HOME owned by the unprivileged user (named volume inherits this).
 RUN mkdir -p /data && chown -R 1000:1000 /data
 # node:25-slim already ships a non-root `node` user at uid 1000; reuse it.
 ENV DSH_HOME=/data
+ENV PNPM_HOME=/data/.pnpm
+ENV npm_config_ignore_scripts=true
 WORKDIR /workspace
 USER node
 # dsh's HMR plugin requires --expose-internals, which NODE_OPTIONS rejects,

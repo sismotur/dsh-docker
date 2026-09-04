@@ -8,4 +8,6 @@ for p in web headless; do
   cp "/opt/dsh-patches/$p/cordis.patch.yml" "$DSH_HOME/profiles/$p/cordis.patch.yml"
   echo "seeded $DSH_HOME/profiles/$p/cordis.patch.yml"
 done
-echo "oMLX patches seeded."
+# pnpm store on the writable volume (rootfs is read-only at runtime).
+mkdir -p "${PNPM_HOME:-$DSH_HOME/.pnpm}"
+echo "oMLX patches + pnpm store ready."

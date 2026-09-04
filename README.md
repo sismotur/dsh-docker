@@ -43,7 +43,15 @@ Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
 
 - **Multi-stage build** — `python3`, `make`, `g++` install in the `builder`
   stage for the native addon `node-addon-require-builtin` but are not copied
-  to the runtime image. The runtime ships only Node + dsh.
+  to the runtime image. The runtime ships only Node + dsh + pnpm.
+- **pnpm for plugin management** — installed in the builder and symlinked into
+  runtime. Its store (`PNPM_HOME=/data/.pnpm`) lives on the writable named
+  volume, not the read-only rootfs.
+- **Postinstall scripts blocked by default** — `npm_config_ignore_scripts=true`
+  plus pnpm 11's build-approval gate prevent npm lifecycle scripts from
+  executing at install time. This neutralizes the primary supply-chain vector
+  for a rogue plugin (a malicious `postinstall` cannot run). See
+  [Plugins](#plugins) for the trusted-plugin override.
 - **Explicit node entrypoint** — `ENTRYPOINT ["node", "--expose-internals",
   ".../bin.js"]`. dsh's HMR plugin requires `--expose-internals`; `NODE_OPTIONS`
   rejects that flag, so it must be a CLI argument.
@@ -167,6 +175,63 @@ The agent can only read/write `/workspace` (bind-mounted to
 `~/dsh-docker/workspace`) and `/data` (its private state volume). Put files
 you want it to touch in `~/dsh-docker/workspace` first.
 
+## Plugins
+
+dsh profiles are extensible with plugin bundles. Plugin management is CLI-only
+(the web UI's Plugins page shows installed plugins and their settings but
+cannot install or remove them). Installs run inside the hardened container via
+the wrapper, so they are confined by the same controls as the agent itself.
+
+### Installing, listing, and removing
+
+```sh
+./run-dsh.sh plugin web add <package>        # install a plugin into the web profile
+./run-dsh.sh plugin web list                 # list installed plugins
+./run-dsh.sh plugin web remove <package>     # remove a plugin
+```
+
+`<package>` is any npm package name; dsh forwards to pnpm in the profile
+directory (`/data/profiles/<name>`). A package that declares a `dsh.bundle` is
+loaded as a profile layer; a plain dependency is installed but not layered in
+until a later version adds a bundle.
+
+### Persistence
+
+Plugin installs persist on the `dsh-home` named volume (`/data`):
+- `docker compose down` — **keeps** installed plugins (volume retained).
+- `docker compose down -v` — **wipes** plugins, sessions, settings, and the
+  pnpm store. Re-run `./run-dsh.sh seed` after `down -v` to restore the oMLX
+  patches.
+
+### Rogue-plugin protection
+
+Two independent gates prevent a malicious package from running code at install
+time:
+
+1. **`ignore-scripts` env var** — blocks npm lifecycle scripts
+   (`preinstall`, `install`, `postinstall`).
+2. **pnpm 11 build-approval** — ignores build scripts unless explicitly
+   approved.
+
+Both are active by default. A rogue plugin's `postinstall` cannot execute.
+
+At runtime, a loaded plugin runs as the unprivileged `node` user inside the
+container with zero capabilities and a read-only rootfs — the same confinement
+as the agent. Its blast radius is limited to `/workspace` and `/data`.
+
+### Installing a trusted plugin that needs a native build
+
+Some legitimate plugins ship native addons that require a build step. To allow
+build scripts for a one-time trusted install, override both gates:
+
+```sh
+docker compose run --rm -e npm_config_ignore_scripts= --entrypoint sh dsh-headless \
+  -c 'cd /data/profiles/web && pnpm add <package> --config.dangerouslyAllowAllBuilds=true'
+```
+
+This is intentionally verbose so that build approval is a deliberate, informed
+act — not a default.
+
 ## oMLX config
 
 The patches in `patches/` repoint the `deepseek-official` adapter at
@@ -176,9 +241,9 @@ bare-metal config is in `~/dsh-omlx-backup/`.
 
 ## Files
 
-- `Dockerfile` — multi-stage build.
+- `Dockerfile` — multi-stage build (dsh + pnpm, build tools excluded).
 - `docker-compose.yml` — hardened service definitions.
 - `patches/{web,headless}/cordis.patch.yml` — container-variant oMLX patches.
-- `seed-omlx.sh` — seeds patches into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper.
+- `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
+- `run-dsh.sh` — host wrapper (seed / web / headless / plugin).
 - `.env.example` — API key template.
