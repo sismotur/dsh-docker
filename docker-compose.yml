@@ -24,6 +24,12 @@ x-dsh-base: &dsh-base
     - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-}
     - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
     - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
+    # Bind-mounted repos are owned by the host uid, not the container's uid 1000.
+    # Git's safe.directory check would reject them; allow /workspace via env-var
+    # config (no .gitconfig file needed — the rootfs is read-only).
+    - GIT_CONFIG_COUNT=1
+    - GIT_CONFIG_KEY_0=safe.directory
+    - GIT_CONFIG_VALUE_0=/workspace
 
 services:
   dsh-web:
