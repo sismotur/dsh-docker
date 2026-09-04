@@ -1,0 +1,54 @@
+# LiteLLM proxy config: routes dsh requests to oMLX models with auto-routing.
+# dsh points at http://litellm:4000/v1; LiteLLM classifies each request by
+# complexity and routes to the appropriate tier's model on oMLX.
+
+model_list:
+  # --- Individual models (for manual selection via dsh UI) ---
+  - model_name: Qwen3-Coder-30B-A3B-Instruct-4bit
+    litellm_params:
+      model: openai/Qwen3-Coder-30B-A3B-Instruct-4bit
+      api_base: http://host.docker.internal:8000/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  - model_name: Qwen3.8-27B-OptiQ-4bit
+    litellm_params:
+      model: openai/Qwen3.8-27B-OptiQ-4bit
+      api_base: http://host.docker.internal:8000/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  - model_name: Qwen3.6-35B-A3B-4bit
+    litellm_params:
+      model: openai/Qwen3.6-35B-A3B-4bit
+      api_base: http://host.docker.internal:8000/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  # --- Auto router (default) ---
+  # Classifies each request by complexity (heuristic scorer, sub-ms) and
+  # routes to the tier's model. Context-window escalation is on by default:
+  # if a prompt provably won't fit the chosen model, it escalates to a bigger one.
+  - model_name: smart-router
+    litellm_params:
+      model: auto_router/complexity_router
+      drop_params: true
+      complexity_router_config:
+        tiers:
+          SIMPLE: Qwen3-Coder-30B-A3B-Instruct-4bit
+          MEDIUM: Qwen3-Coder-30B-A3B-Instruct-4bit
+          COMPLEX: Qwen3.8-27B-OptiQ-4bit
+          REASONING: Qwen3.6-35B-A3B-4bit
+        # Classify only new user asks, carry the decision through tool-result
+        # and follow-up turns (fewer classifier calls in agentic sessions).
+        classification_mode: user_turn
+      complexity_router_default_model: Qwen3-Coder-30B-A3B-Instruct-4bit
+
+litellm_settings:
+  num_retries: 2
+  request_timeout: 120
+  # Fallback chain: if a model fails, try the next.
+  fallbacks:
+    - smart-router:
+        - Qwen3-Coder-30B-A3B-Instruct-4bit
+    - Qwen3.8-27B-OptiQ-4bit:
+        - Qwen3-Coder-30B-A3B-Instruct-4bit
+    - Qwen3.6-35B-A3B-4bit:
+        - Qwen3.8-27B-OptiQ-4bit

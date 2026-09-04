@@ -5,6 +5,7 @@ x-dsh-base: &dsh-base
   image: dsh-hardened:latest
   build: .
   user: "1000:1000"
+  init: true
   cap_drop:
     - ALL
   security_opt:
@@ -18,6 +19,12 @@ x-dsh-base: &dsh-base
   pids_limit: 512
   mem_limit: 4g
   cpus: "4"
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
   environment:
     - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
     - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-}
@@ -32,6 +39,30 @@ x-dsh-base: &dsh-base
     - GIT_CONFIG_VALUE_0=/workspace
 
 services:
+  # LiteLLM proxy: auto-routes dsh requests to oMLX models by complexity.
+  # Long-running service started with 'docker compose up -d litellm'.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    command: ["--config", "/config.yaml", "--port", "4000"]
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./litellm-config.yaml:/config.yaml:ro
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4000/health/liveliness\")' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   dsh-web:
     <<: *dsh-base
     entrypoint: ["/usr/local/bin/web-entrypoint.sh"]

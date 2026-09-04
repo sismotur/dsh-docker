@@ -38,6 +38,13 @@ Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
   Caps CPU, memory, and process count to bound runaway agent loops.
 - **Loopback-only port** — `127.0.0.1:8080:8080`. The web UI is reachable
   only from the host, never from the network.
+- **Init process** — `init: true` adds a proper PID 1 (tini) for correct signal
+  handling and zombie reaping.
+- **Restart policy** — `restart: unless-stopped`. Containers survive crashes and
+  reboots. Applies to `docker compose up`-started services (e.g. litellm);
+  `run --rm` ephemeral containers are not affected.
+- **Log limits** — `logging: json-file` with `max-size: 10m, max-file: 3`.
+  Prevents unbounded log growth on disk (caps at ~30 MB per service).
 
 ### Build controls (Dockerfile)
 
@@ -321,12 +328,65 @@ The memory server is spawned automatically when dsh boots; no manual startup
 is needed. To add more MCP servers, add another `insert` block in the patch
 file and rebuild.
 
+## LiteLLM router (auto model selection)
+
+dsh points at a LiteLLM proxy (`litellm` compose service, port 4000) instead of
+oMLX directly. LiteLLM's `complexity_router` classifies each request by
+complexity and routes to the appropriate oMLX model — like Warp's "auto":
+
+```
+dsh container  →  LiteLLM (port 4000)  →  oMLX (port 8000)  →  models
+                   classifies + routes
+```
+
+### Tiers
+
+| Tier | Model | Active params | When |
+|---|---|---|---|
+| SIMPLE | Qwen3-Coder-30B-A3B-Instruct-4bit | 3B | Greetings, simple lookups |
+| MEDIUM | Qwen3-Coder-30B-A3B-Instruct-4bit | 3B | Standard coding tasks |
+| COMPLEX | Qwen3.8-27B-OptiQ-4bit | 27B | Architecture, multi-file |
+| REASONING | Qwen3.6-35B-A3B-4bit | 3B | Deep analysis (thinking mode) |
+
+The heuristic classifier is sub-millisecond (no extra model calls). Context-window
+escalation is on by default: if a prompt provably won't fit the chosen model,
+it auto-escalates to a bigger one. `classification_mode: user_turn` classifies
+only new user asks and carries the decision through tool-result turns (fewer
+classifier calls in agentic sessions).
+
+### Default model
+
+dsh's `agent-default-model` is set to `smart-router`. Individual models are
+also advertised for manual per-session selection in the dsh UI.
+
+### Fallbacks
+
+If a model fails, LiteLLM falls back: `smart-router` → `Qwen3-Coder-30B-A3B`,
+`Qwen3.8-27B-OptiQ` → `Qwen3-Coder-30B-A3B`, `Qwen3.6-35B-A3B` →
+`Qwen3.8-27B-OptiQ`.
+
+### Config
+
+- `litellm-config.yaml` — model list, auto router tiers, fallback chains.
+- The `litellm` service is a long-running container started with
+  `docker compose up -d litellm`. The wrapper starts it automatically before
+  dsh.
+- LiteLLM reaches oMLX via `host.docker.internal:8000`; dsh reaches LiteLLM via
+  the compose network (`litellm:4000`).
+- LiteLLM has a healthcheck (`/health/liveliness`) and `restart: unless-stopped`.
+
+### oMLX settings tuning
+
+The oMLX server config (`~/.omlx/settings.json`) was tuned for this setup:
+`chunked_prefill`, `hot_cache_max_size: 32GB`, `initial_cache_blocks: 512`,
+`burst_decode_mode: fast`, `max_concurrent_requests: 3`,
+`max_context_window: 262144`. Backup at `~/.omlx/settings.json.bak.*`.
+
 ## oMLX config
 
-The patches in `patches/` repoint the `deepseek-official` adapter at
-`http://host.docker.internal:8000/v1` (the host oMLX server, as seen from the
-container) and advertise four 4-bit models. The backup of the original
-bare-metal config is in `~/dsh-omlx-backup/`.
+The backup of the original bare-metal dsh config is in `~/dsh-omlx-backup/`.
+The oMLX server itself is configured via `~/.omlx/settings.json` (not part of
+this repo). See the LiteLLM router section above for the current routing setup.
 
 ## Security audit
 
@@ -350,10 +410,11 @@ and `/data`.
 ## Files
 
 - `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools + MCP memory server, build tools excluded).
-- `docker-compose.yml` — hardened service definitions.
+- `docker-compose.yml` — hardened service definitions (dsh + litellm router).
+- `litellm-config.yaml` — LiteLLM proxy config: model list, auto router tiers, fallbacks.
 - `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy.
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
-- `patches/{web,headless}/cordis.patch.yml` — container-variant oMLX + MCP server patches.
+- `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless / plugin; accepts a project path).
+- `run-dsh.sh` — host wrapper (seed / web / headless / plugin; starts litellm, accepts a project path).
 - `.env.example` — API key and git identity template.

@@ -25,8 +25,14 @@ mount_project() {
   echo "-v $abs:/workspace"
 }
 
+# Ensure the LiteLLM router is running before dsh starts.
+ensure_router() {
+  docker compose up -d litellm 2>&1 | grep -v "gcloud\|docker-helper\|WARN\|credential" || true
+}
+
 case "${1:-}" in
   web)
+    ensure_router
     MNT=$(mount_project "${2:-}")
     # The web entrypoint runs dsh on 127.0.0.1 (safety) and socat-proxies
     # 0.0.0.0:8080 so Docker can publish the port. --service-ports publishes.
@@ -34,6 +40,7 @@ case "${1:-}" in
     docker compose run --rm --service-ports $MNT dsh-web
     ;;
   headless)
+    ensure_router
     shift
     JOB="$1"; shift
     MNT=$(mount_project "${1:-}")

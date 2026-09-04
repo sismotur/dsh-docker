@@ -2,33 +2,33 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# oMLX integration (container variant): repoint the deepseek-official adapter
-# at the oMLX OpenAI-compatible server running ON THE HOST, reachable from the
-# container via host.docker.internal:8000. The API key is read from the
-# DEEPSEEK_API_KEY environment variable (apiKeyEnv below), passed through by
-# docker compose.
+# LiteLLM router integration: dsh points at the LiteLLM proxy (compose service
+# 'litellm' on port 4000) which auto-routes requests to oMLX models by
+# complexity. The API key is read from DEEPSEEK_API_KEY (apiKeyEnv below).
+# smart-router is the default; individual models are also advertised for manual
+# per-session selection in the dsh UI.
 - id: llm-deepseek
   config:
-    baseURL: http://host.docker.internal:8000/v1
+    baseURL: http://litellm:4000/v1
     apiKeyEnv: DEEPSEEK_API_KEY
     reasoningEffort: high
     models:
+      - id: smart-router
+        name: smart-router (auto-routing)
+        contextWindow: 262144
       - id: Qwen3-Coder-30B-A3B-Instruct-4bit
         name: Qwen3-Coder-30B-A3B (fast coder)
+        contextWindow: 262144
+      - id: Qwen3.8-27B-OptiQ-4bit
+        name: Qwen3.8-27B-OptiQ
         contextWindow: 262144
       - id: Qwen3.6-35B-A3B-4bit
         name: Qwen3.6-35B-A3B (fast + thinking)
         contextWindow: 262144
-      - id: DeepSeek-V4-Flash-0731-2.4bit-mixed
-        name: DeepSeek-V4-Flash (max quality, 1M ctx)
-        contextWindow: 1048576
-      - id: Qwen3.8-27B-OptiQ-4bit
-        name: Qwen3.8-27B-OptiQ
-        contextWindow: 262144
 - id: agent-default-model
   config:
     provider: deepseek-official
-    model: Qwen3-Coder-30B-A3B-Instruct-4bit
+    model: smart-router
 # MCP memory server: knowledge-graph memory across sessions. Pre-installed in
 # the image (no npx, no runtime network). The memory file persists on the
 # DSH_HOME volume at /data/memory.jsonl. Tools are exposed as mcp__memory__*.
