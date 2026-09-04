@@ -301,7 +301,23 @@ docker compose run --rm -e npm_config_ignore_scripts= --entrypoint sh dsh-headle
 This is intentionally verbose so that build approval is a deliberate, informed
 act — not a default.
 
-### dsh-better-sidebar (file editor, Git panel, browser)
+### Installing a git-hosted plugin
+
+Some plugins are not published to npm (or the npm name is taken by an unrelated
+package). Install them from GitHub with `github:<owner>/<repo>`. Git-hosted
+plugins run a `prepare` build script, so both gates must be overridden:
+
+```sh
+docker compose run --rm -e npm_config_ignore_scripts= dsh-headless \
+  plugin --profile web add "github:<owner>/<repo>"
+```
+
+The image includes `ca-certificates` so git HTTPS works. If SSL errors persist
+on an older image, set `GIT_SSL_NO_VERIFY=1` (safe in the sandboxed container).
+
+### Installed plugins
+
+#### dsh-better-sidebar (file editor, Git panel, browser)
 
 The [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) plugin
 adds a full sidebar workspace to the dsh web UI: file explorer + CodeMirror
@@ -340,6 +356,45 @@ EOF'
 
 After installation, hard-refresh the browser (Cmd/Ctrl+Shift+R) to see the
 sidebar.
+
+#### dsh-at-file (@file mentions)
+
+[dsh-at-file](https://github.com/omdsh-dev/dsh-at-file) adds Codex-style `@file`
+mentions to the prompt composer: type `@`, search workspace files, attach their
+contents to the prompt. Pure UI plugin, no native deps. Same author as
+dsh-better-sidebar.
+
+```sh
+./run-dsh.sh plugin web add dsh-at-file
+```
+
+#### aegis (engineering discipline skills)
+
+[aegis](https://github.com/ganyuanran/aegis) is an engineering method pack:
+baseline-first planning, systematic debugging, verification before completion,
+and repair/retirement tracking. It enforces habits that prevent reworks — the
+agent aligns with the real codebase state before editing and proves completion
+with fresh evidence. Pure TypeScript skills, no native deps.
+
+**Must be installed from GitHub** (the npm name `aegis` is an unrelated old JS
+library):
+
+```sh
+docker compose run --rm -e npm_config_ignore_scripts= dsh-headless \
+  plugin --profile web add "github:ganyuanran/aegis"
+```
+
+#### dsh-context (context window insight)
+
+[dsh-context](https://github.com/bowenliang123/dsh-context) adds a context
+insight panel: see what the model's context window contains, per-message token
+stats, compression/injection events, and composition vs window size. Useful in
+long agentic sessions to understand when and why the agent loses track. Pure UI
+plugin, no native deps.
+
+```sh
+./run-dsh.sh plugin web add dsh-context
+```
 
 ## MCP servers
 

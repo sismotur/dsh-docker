@@ -15,7 +15,7 @@ FROM node:25-slim AS runtime
 # Docker port forwarding cannot reach. socat bridges 0.0.0.0:8080 -> 127.0.0.1:8090.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       socat git curl jq less ripgrep openssh-client \
+       socat git ca-certificates curl jq less ripgrep openssh-client \
     && rm -rf /var/lib/apt/lists/*
 # No-op xdg-open: dsh calls xdg-open when a file link is clicked in chat.
 # Containers cannot reach the host GUI, so a real opener is impossible; this
