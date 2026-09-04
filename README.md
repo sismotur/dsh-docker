@@ -64,6 +64,10 @@ Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
 - **setuid/setgid stripped** — Debian base binaries (`su`, `passwd`, `mount`,
   etc.) have their setuid/setgid bits removed. No privilege-escalation surface
   remains (CIS Docker Benchmark).
+- **Dev tools pre-installed** — `git`, `curl`, `jq`, `less`, `ripgrep`,
+  `openssh-client` are added for in-container development (search, API
+  testing, paging, git operations). These are userland utilities; none open
+  ports or grant privileges.
 
 ### Daemon isolation (macOS)
 
@@ -290,6 +294,33 @@ docker compose run --rm -e npm_config_ignore_scripts= --entrypoint sh dsh-headle
 This is intentionally verbose so that build approval is a deliberate, informed
 act — not a default.
 
+## MCP servers
+
+MCP (Model Context Protocol) servers are pre-installed in the image and
+injected via `cordis.patch.yml` for predictable, reproducible configuration —
+no UI setup, no `npx`, no runtime network fetch.
+
+### Memory server (knowledge graph)
+
+The `@modelcontextprotocol/server-memory` package is pre-installed and
+loaded as an `mcp-client` plugin instance in both web and headless profiles.
+It provides persistent knowledge-graph memory across sessions:
+
+- **Tools exposed**: `mcp__memory__create_entities`,
+  `mcp__memory__create_relations`, `mcp__memory__add_observations`,
+  `mcp__memory__delete_entities`, `mcp__memory__delete_observations`,
+  `mcp__memory__delete_relations`, `mcp__memory__read_graph`,
+  `mcp__memory__search_nodes`, `mcp__memory__open_nodes`.
+- **Transport**: stdio (spawned as a child process inside the container).
+- **Memory file**: `/data/memory.jsonl` on the `dsh-home` named volume —
+  persists across `docker compose down` (retained); wiped by `down -v`.
+- **Config source**: `patches/{web,headless}/cordis.patch.yml` (the `insert`
+  block adding the `mcp-memory` entry).
+
+The memory server is spawned automatically when dsh boots; no manual startup
+is needed. To add more MCP servers, add another `insert` block in the patch
+file and rebuild.
+
 ## oMLX config
 
 The patches in `patches/` repoint the `deepseek-official` adapter at
@@ -297,12 +328,32 @@ The patches in `patches/` repoint the `deepseek-official` adapter at
 container) and advertise four 4-bit models. The backup of the original
 bare-metal config is in `~/dsh-omlx-backup/`.
 
+## Security audit
+
+A full root-privilege audit was performed against the built image and running
+container. All root-privilege escalation vectors are neutralized:
+
+- Container user: `uid=1000(node)` (never root).
+- Effective capabilities: `CapEff: 0000000000000000` (zero).
+- Bounding capabilities: `CapBnd: 0000000000000000` (cannot acquire caps).
+- `NoNewPrivs: 1` — setuid binaries cannot escalate.
+- `Seccomp: 2` (filter mode) active.
+- Root filesystem read-only; `/tmp` is `nosuid,nodev,noexec`.
+- All root-owned paths (`/`, `/etc`, `/usr`, `/var`, `/root`, `/home`, `/opt`)
+  unwritable by the container user.
+- `sudo` not installed; setuid/setgid bits stripped from all base binaries.
+- `--privileged` not used; no host namespaces.
+
+No root privileges are exposed. The blast radius is limited to `/workspace`
+and `/data`.
+
 ## Files
 
-- `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools, build tools excluded).
+- `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools + MCP memory server, build tools excluded).
 - `docker-compose.yml` — hardened service definitions.
 - `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy.
-- `patches/{web,headless}/cordis.patch.yml` — container-variant oMLX patches.
+- `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
+- `patches/{web,headless}/cordis.patch.yml` — container-variant oMLX + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
 - `run-dsh.sh` — host wrapper (seed / web / headless / plugin; accepts a project path).
 - `.env.example` — API key and git identity template.
