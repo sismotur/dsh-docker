@@ -7,6 +7,9 @@ set -eu
 DSH_PORT=8090
 PROXY_PORT=8080
 
+# Pre-register /workspace in the workspace registry so it appears in the UI.
+/usr/local/bin/register-workspace.sh || true
+
 # Start dsh on loopback only (dsh refuses 0.0.0.0 for RCE safety). Its own
 # startup line reports the internal port; suppress it so it cannot mislead.
 node --expose-internals /usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js \

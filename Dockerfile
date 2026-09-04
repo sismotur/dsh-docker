@@ -21,8 +21,9 @@ RUN apt-get update \
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml
 COPY seed-omlx.sh /usr/local/bin/seed-omlx.sh
+COPY register-workspace.sh /usr/local/bin/register-workspace.sh
 COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
-RUN chmod +x /usr/local/bin/seed-omlx.sh /usr/local/bin/web-entrypoint.sh
+RUN chmod +x /usr/local/bin/seed-omlx.sh /usr/local/bin/register-workspace.sh /usr/local/bin/web-entrypoint.sh
 # dsh global install from builder. Recreate the npm symlink so ESM module
 # resolution stays relative to the real package path.
 COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
