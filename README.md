@@ -301,6 +301,46 @@ docker compose run --rm -e npm_config_ignore_scripts= --entrypoint sh dsh-headle
 This is intentionally verbose so that build approval is a deliberate, informed
 act — not a default.
 
+### dsh-better-sidebar (file editor, Git panel, browser)
+
+The [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) plugin
+adds a full sidebar workspace to the dsh web UI: file explorer + CodeMirror
+editor, Git panel (diff/stage/commit), embedded browser, and background task
+view. It is installed in the web profile on the `dsh-home` volume.
+
+The plugin's terminal feature depends on `node-pty` (a native addon). It is
+**intentionally not compiled** — `node-pty` ships no Linux prebuilds (only
+darwin/win32), so the terminal tab does not function inside the Linux
+container. All other features (file editor, Git panel, browser) work normally.
+
+To skip the native build without erroring, pnpm's `allowBuilds` is set to
+`false` for `node-pty` in the profile's `pnpm-workspace.yaml`:
+
+```yaml
+allowBuilds:
+  node-pty: false
+```
+
+**Reinstall after a volume wipe** (`docker compose down -v`):
+
+```sh
+# 1. Re-seed the oMLX patches and default model.
+./run-dsh.sh seed
+
+# 2. Set allowBuilds for node-pty (skip native build without error).
+docker compose run --rm --entrypoint sh dsh-headless -c '
+  cat >> /data/profiles/web/pnpm-workspace.yaml << EOF
+allowBuilds:
+  node-pty: false
+EOF'
+
+# 3. Install the plugin.
+./run-dsh.sh plugin web add dsh-better-sidebar
+```
+
+After installation, hard-refresh the browser (Cmd/Ctrl+Shift+R) to see the
+sidebar.
+
 ## MCP servers
 
 MCP (Model Context Protocol) servers are pre-installed in the image and
