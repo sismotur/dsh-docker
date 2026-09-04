@@ -7,7 +7,7 @@ FROM node:25-slim AS builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
-RUN npm i -g @deepseek-ai/dsh@0.1.1-rc.2 pnpm
+RUN npm i -g @deepseek-ai/dsh@0.1.1-rc.2 pnpm @modelcontextprotocol/server-memory
 
 FROM node:25-slim AS runtime
 # socat: TCP proxy so Docker can publish the web port. dsh refuses --host

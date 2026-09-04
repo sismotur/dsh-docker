@@ -29,3 +29,17 @@
   config:
     provider: deepseek-official
     model: Qwen3-Coder-30B-A3B-Instruct-4bit
+# MCP memory server: knowledge-graph memory across sessions. Pre-installed in
+# the image (no npx, no runtime network). The memory file persists on the
+# DSH_HOME volume at /data/memory.jsonl. Tools are exposed as mcp__memory__*.
+- insert:
+    - id: mcp-memory
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: memory
+        command: node
+        args:
+          - /usr/local/lib/node_modules/@modelcontextprotocol/server-memory/dist/index.js
+        env:
+          MEMORY_FILE_PATH: /data/memory.jsonl
