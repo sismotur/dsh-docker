@@ -25,6 +25,9 @@
       - id: Qwen3.6-35B-A3B-4bit
         name: Qwen3.6-35B-A3B (fast + thinking)
         contextWindow: 262144
+      - id: DeepSeek-V4-Flash-0731-2.4bit-mixed
+        name: DeepSeek-V4-Flash (max quality, 1M ctx)
+        contextWindow: 1048576
 - id: agent-default-model
   config:
     provider: deepseek-official

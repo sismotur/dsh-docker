@@ -22,6 +22,12 @@ model_list:
       api_base: http://host.docker.internal:8000/v1
       api_key: os.environ/DEEPSEEK_API_KEY
 
+  - model_name: DeepSeek-V4-Flash-0731-2.4bit-mixed
+    litellm_params:
+      model: openai/DeepSeek-V4-Flash-0731-2.4bit-mixed
+      api_base: http://host.docker.internal:8000/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+
   # --- Auto router (default) ---
   # Classifies each request by complexity (heuristic scorer, sub-ms) and
   # routes to the tier's model. Context-window escalation is on by default:
@@ -51,4 +57,6 @@ litellm_settings:
     - Qwen3.8-27B-OptiQ-4bit:
         - Qwen3-Coder-30B-A3B-Instruct-4bit
     - Qwen3.6-35B-A3B-4bit:
+        - Qwen3.8-27B-OptiQ-4bit
+    - DeepSeek-V4-Flash-0731-2.4bit-mixed:
         - Qwen3.8-27B-OptiQ-4bit

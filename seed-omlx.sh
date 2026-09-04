@@ -10,4 +10,16 @@ for p in web headless; do
 done
 # pnpm store on the writable volume (rootfs is read-only at runtime).
 mkdir -p "${PNPM_HOME:-$DSH_HOME/.pnpm}"
-echo "oMLX patches + pnpm store ready."
+
+# Set the default model to smart-router (the LiteLLM auto router). A saved
+# selection in settings.yaml overrides the cordis patch's agent-default-model,
+# so reset it here to avoid a stale model name after switching to the router.
+cat > "$DSH_HOME/settings.yaml" << 'EOF'
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+agent-default-model:
+  provider: deepseek-official
+  model: smart-router
+  reasoningEffort: high
+EOF
+echo "oMLX patches + pnpm store + default model ready."
