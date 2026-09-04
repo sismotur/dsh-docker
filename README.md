@@ -55,6 +55,15 @@ Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
 - **Explicit node entrypoint** — `ENTRYPOINT ["node", "--expose-internals",
   ".../bin.js"]`. dsh's HMR plugin requires `--expose-internals`; `NODE_OPTIONS`
   rejects that flag, so it must be a CLI argument.
+- **socat TCP proxy for web** — dsh refuses `--host 0.0.0.0` (RCE safety),
+  binding only to `127.0.0.1` inside the container, which Docker port
+  forwarding cannot reach. A `web-entrypoint.sh` runs dsh on `127.0.0.1:8090`
+  and `socat` bridges `0.0.0.0:8080` -> `127.0.0.1:8090` so the published port
+  works. socat runs as the non-root `node` user; the host port is still
+  `127.0.0.1`-only.
+- **setuid/setgid stripped** — Debian base binaries (`su`, `passwd`, `mount`,
+  etc.) have their setuid/setgid bits removed. No privilege-escalation surface
+  remains (CIS Docker Benchmark).
 
 ### Daemon isolation (macOS)
 
@@ -241,8 +250,9 @@ bare-metal config is in `~/dsh-omlx-backup/`.
 
 ## Files
 
-- `Dockerfile` — multi-stage build (dsh + pnpm, build tools excluded).
+- `Dockerfile` — multi-stage build (dsh + pnpm + socat, build tools excluded).
 - `docker-compose.yml` — hardened service definitions.
+- `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy.
 - `patches/{web,headless}/cordis.patch.yml` — container-variant oMLX patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
 - `run-dsh.sh` — host wrapper (seed / web / headless / plugin).

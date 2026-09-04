@@ -9,7 +9,9 @@ set -e
 cd "$(dirname "$0")"
 case "${1:-}" in
   web)
-    docker compose run --rm dsh-web --profile web --port 8080
+    # The web entrypoint runs dsh on 127.0.0.1 (safety) and socat-proxies
+    # 0.0.0.0:8080 so Docker can publish the port. --service-ports publishes.
+    docker compose run --rm --service-ports dsh-web
     ;;
   headless)
     shift

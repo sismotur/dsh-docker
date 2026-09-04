@@ -10,11 +10,18 @@ RUN apt-get update \
 RUN npm i -g @deepseek-ai/dsh@0.1.1-rc.2 pnpm
 
 FROM node:25-slim AS runtime
+# socat: TCP proxy so Docker can publish the web port. dsh refuses --host
+# 0.0.0.0 (RCE safety), binding only to 127.0.0.1 inside the container, which
+# Docker port forwarding cannot reach. socat bridges 0.0.0.0:8080 -> 127.0.0.1:8090.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends socat \
+    && rm -rf /var/lib/apt/lists/*
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml
 COPY seed-omlx.sh /usr/local/bin/seed-omlx.sh
-RUN chmod +x /usr/local/bin/seed-omlx.sh
+COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
+RUN chmod +x /usr/local/bin/seed-omlx.sh /usr/local/bin/web-entrypoint.sh
 # dsh global install from builder. Recreate the npm symlink so ESM module
 # resolution stays relative to the real package path.
 COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
