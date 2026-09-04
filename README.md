@@ -374,6 +374,10 @@ If a model fails, LiteLLM falls back: `smart-router` → `Qwen3-VL-30B-A3B`,
 - LiteLLM reaches oMLX via `host.docker.internal:8000`; dsh reaches LiteLLM via
   the compose network (`litellm:4000`).
 - LiteLLM has a healthcheck (`/health/liveliness`) and `restart: unless-stopped`.
+- Each target model sets `drop_params: true` **per-model** (not in
+  `litellm_settings`) so unsupported params like dsh's `thinking` (sent when
+  `reasoningEffort` is High) are dropped before reaching oMLX. Setting it
+  globally would strip the `tools` parameter from router requests.
 
 ### oMLX settings tuning
 

@@ -9,24 +9,31 @@ model_list:
       model: openai/Qwen3.8-27B-OptiQ-4bit
       api_base: http://host.docker.internal:8000/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      # Drop unsupported params (e.g. dsh 'thinking' from reasoningEffort)
+      # before forwarding to oMLX. Per-model, NOT in litellm_settings, so the
+      # smart-router keeps 'tools' for routing (global drop_params strips tools).
+      drop_params: true
 
   - model_name: Qwen3.6-35B-A3B-4bit
     litellm_params:
       model: openai/Qwen3.6-35B-A3B-4bit
       api_base: http://host.docker.internal:8000/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
 
   - model_name: DeepSeek-V4-Flash-0731-2.4bit-mixed
     litellm_params:
       model: openai/DeepSeek-V4-Flash-0731-2.4bit-mixed
       api_base: http://host.docker.internal:8000/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
 
   - model_name: Qwen3-VL-30B-A3B-Instruct-4bit
     litellm_params:
       model: openai/Qwen3-VL-30B-A3B-Instruct-4bit
       api_base: http://host.docker.internal:8000/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
 
   # --- Auto router (default) ---
   # Classifies each request by complexity (heuristic scorer, sub-ms) and
