@@ -25,4 +25,6 @@ RUN mkdir -p /data && chown -R 1000:1000 /data
 ENV DSH_HOME=/data
 WORKDIR /workspace
 USER node
-ENTRYPOINT ["dsh"]
+# dsh's HMR plugin requires --expose-internals, which NODE_OPTIONS rejects,
+# so invoke node explicitly with the flag.
+ENTRYPOINT ["node", "--expose-internals", "/usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"]
