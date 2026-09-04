@@ -1,0 +1,6 @@
+# Local oMLX API key (secret) — never commit
+.env
+
+# Runtime workspace bind-mount contents (kept empty via .gitkeep)
+workspace/*
+!workspace/.gitkeep
