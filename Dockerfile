@@ -24,6 +24,10 @@ RUN ln -s ../lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/local/bin/dsh
 # by default to neutralize rogue-plugin supply-chain execution at install time;
 # override with --config.ignore-scripts=false for a trusted native-addon build.
 RUN ln -s ../lib/node_modules/pnpm/bin/pnpm.mjs /usr/local/bin/pnpm
+# Strip setuid/setgid bits from Debian base binaries (su, passwd, mount, etc).
+# They are unnecessary in this container and NoNewPrivs already neutralizes them;
+# removing them eliminates the attack surface entirely.
+RUN find / -xdev -perm /6000 -type f -exec chmod ug-s {} + 2>/dev/null || true
 # Writable DSH_HOME owned by the unprivileged user (named volume inherits this).
 RUN mkdir -p /data && chown -R 1000:1000 /data
 # node:25-slim already ships a non-root `node` user at uid 1000; reuse it.
