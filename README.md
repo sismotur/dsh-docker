@@ -43,16 +43,50 @@ docker compose build
 ./run-dsh.sh seed           # seed oMLX patches into the volume
 ```
 
-## Usage
+## Starting and stopping
+
+dsh has no background daemon. Each invocation is an ephemeral container
+(`--rm`) whose lifecycle depends on the profile:
+
+### Web profile (long-running, interactive)
 
 ```sh
-./run-dsh.sh web                     # web UI at http://127.0.0.1:8080
-./run-dsh.sh headless "run the tests"  # one-shot job
+./run-dsh.sh web        # serves the UI at http://127.0.0.1:8080
 ```
 
-The agent can only read/write `/workspace` (bind-mounted to `~/dsh-docker/workspace`)
-and `/data` (its private state volume). Put files you want it to touch in
-`~/dsh-docker/workspace` first.
+Runs in the foreground. Stop it with `Ctrl+C` in that terminal; the
+container exits and is removed automatically.
+
+### Headless profile (one-shot)
+
+```sh
+./run-dsh.sh headless "run the tests"
+```
+
+Runs one job, prints the result, and exits on its own. No manual stop
+needed; the container removes itself when done.
+
+### Checking what is running
+
+```sh
+docker compose ps       # list active containers
+```
+
+### Cleaning up (containers, volume, image)
+
+```sh
+docker compose down         # remove containers and network
+# Add `-v` to also delete the dsh-home volume (wipes profiles/sessions/settings):
+docker compose down -v
+docker image rm dsh-hardened:latest   # remove the built image
+```
+
+Re-run `./run-dsh.sh seed` after `down -v` to restore the oMLX patches into
+the recreated volume.
+
+The agent can only read/write `/workspace` (bind-mounted to
+`~/dsh-docker/workspace`) and `/data` (its private state volume). Put files
+you want it to touch in `~/dsh-docker/workspace` first.
 
 ## oMLX config
 
