@@ -10,7 +10,10 @@
 set -e
 cd "$(dirname "$0")"
 # Mount a project dir at /workspace if a path argument is given.
-# Returns the -v flag string (or empty).
+# Also passes the real folder's basename through as WORKSPACE_NAME, so the
+# dsh UI can label the workspace with the project's actual name instead of
+# the generic "workspace" mount point.
+# Returns the -v/-e flag string (or empty).
 mount_project() {
   p="$1"
   if [ -z "$p" ]; then
@@ -22,7 +25,8 @@ mount_project() {
     exit 1
   fi
   abs=$(cd "$p" && pwd)
-  echo "-v $abs:/workspace"
+  name=$(basename "$abs")
+  echo "-v $abs:/workspace -e WORKSPACE_NAME=$name"
 }
 
 # Ensure the LiteLLM router is running before dsh starts.
