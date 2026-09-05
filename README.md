@@ -68,6 +68,11 @@ Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
   and `socat` bridges `0.0.0.0:8080` -> `127.0.0.1:8090` so the published port
   works. socat runs as the non-root `node` user; the host port is still
   `127.0.0.1`-only.
+- **One-time token auth (dsh 0.1.2+)** — dsh gates web access behind a
+  one-time token in the launch URL. The bare `http://127.0.0.1:8080` returns
+  401; the tokenized URL (printed at startup) sets an auth cookie on first
+  open. `web-entrypoint.sh` rewrites the internal port in dsh's startup URL
+  line to the published proxy port so the user gets the correct tokenized URL.
 - **setuid/setgid stripped** — Debian base binaries (`su`, `passwd`, `mount`,
   etc.) have their setuid/setgid bits removed. No privilege-escalation surface
   remains (CIS Docker Benchmark).
@@ -164,8 +169,11 @@ dsh has no background daemon. Each invocation is an ephemeral container
 ./run-dsh.sh web ~/Development/myproject   # same, with myproject mounted at /workspace
 ```
 
-Runs in the foreground. Stop it with `Ctrl+C` in that terminal; the
-container exits and is removed automatically.
+Runs in the foreground. dsh 0.1.2+ prints a **tokenized URL** at startup
+(`http://127.0.0.1:8080/?token=...`) — open that exact URL in your browser;
+the bare URL without the token returns 401. The token sets an auth cookie
+valid for 30 days. Stop the container with `Ctrl+C`; it exits and is removed
+automatically.
 
 ### Headless profile (one-shot)
 
@@ -329,6 +337,15 @@ The plugin's terminal feature depends on `node-pty` (a native addon). It is
 darwin/win32), so the terminal tab does not function inside the Linux
 container. All other features (file editor, Git panel, browser) work normally.
 
+**Open chat files in the sidebar** (`interceptOpenPath`, on by default): file
+links in chat (tool-row paths, produced-files row, mentions) open in the
+sidebar editor instead of the system default app. This feature hooks dsh's
+`remote.session.openWorkspacePath` funnel, which arrived in dsh 0.1.2 — it
+was inert on 0.1.1-rc.2 (the wrapper bailed when the method was absent, so
+clicks fell through to the no-op `xdg-open` shim). The 0.1.2-rc.1 upgrade
+activates it. Toggle it in Settings → Side card → "Open chat files in the
+sidebar".
+
 To skip the native build without erroring, pnpm's `allowBuilds` is set to
 `false` for `node-pty` in the profile's `pnpm-workspace.yaml`:
 
@@ -357,16 +374,13 @@ EOF'
 After installation, hard-refresh the browser (Cmd/Ctrl+Shift+R) to see the
 sidebar.
 
-#### dsh-at-file (@file mentions)
+#### dsh-at-file — removed (incompatible with dsh 0.1.2-rc.1)
 
-[dsh-at-file](https://github.com/omdsh-dev/dsh-at-file) adds Codex-style `@file`
-mentions to the prompt composer: type `@`, search workspace files, attach their
-contents to the prompt. Pure UI plugin, no native deps. Same author as
-dsh-better-sidebar.
-
-```sh
-./run-dsh.sh plugin web add dsh-at-file
-```
+dsh-at-file v0.6.3 (the only published version) imports `settingsNamespace`
+from `@deepseek-ai/dsh-settings`, an export removed in dsh 0.1.2-rc.1. It
+fails to load and breaks the entire plugin tree at boot. There is no newer
+version. It was removed from the web profile. The `@file` hover button in
+dsh-better-sidebar's file explorer covers the same use case.
 
 #### aegis (engineering discipline skills)
 
@@ -554,7 +568,7 @@ and `/data`.
 - `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools + MCP memory server, build tools excluded).
 - `docker-compose.yml` — hardened service definitions (dsh + litellm router).
 - `litellm-config.yaml` — LiteLLM proxy config: model list, auto router tiers, fallbacks.
-- `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy.
+- `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy + token-URL port rewrite.
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.

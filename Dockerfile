@@ -7,7 +7,7 @@ FROM node:25-slim AS builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
-RUN npm i -g @deepseek-ai/dsh@0.1.1-rc.2 pnpm @modelcontextprotocol/server-memory
+RUN npm i -g @deepseek-ai/dsh@0.1.2-rc.1 pnpm @modelcontextprotocol/server-memory
 
 FROM node:25-slim AS runtime
 # socat: TCP proxy so Docker can publish the web port. dsh refuses --host
@@ -17,9 +17,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        socat git ca-certificates curl jq less ripgrep openssh-client \
     && rm -rf /var/lib/apt/lists/*
-# No-op xdg-open: dsh calls xdg-open when a file link is clicked in chat.
-# Containers cannot reach the host GUI, so a real opener is impossible; this
-# shim exits cleanly instead of raising spawn ENOENT.
+# No-op xdg-open: a fallback for any residual native file-open gesture.
+# Containers cannot reach the host GUI, so a real opener is impossible. With
+# dsh 0.1.2+ and dsh-better-sidebar's interceptOpenPath (on by default), chat
+# file links open in the sidebar editor client-side and never reach this shim;
+# it remains as a harmless exit-0 fallback instead of raising spawn ENOENT.
 RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/xdg-open && chmod +x /usr/local/bin/xdg-open
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
