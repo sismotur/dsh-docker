@@ -8,6 +8,12 @@ for p in web headless; do
   cp "/opt/dsh-patches/$p/cordis.patch.yml" "$DSH_HOME/profiles/$p/cordis.patch.yml"
   echo "seeded $DSH_HOME/profiles/$p/cordis.patch.yml"
 done
+# Seed the global AGENTS.md (user-global agent instructions). The
+# dsh-agent-instructions system loads $DSH_HOME/AGENTS.md into every session's
+# system prompt as the baseline precedence layer.
+command cp -f /opt/dsh-patches/agents-global.md "$DSH_HOME/AGENTS.md"
+echo "seeded $DSH_HOME/AGENTS.md"
+
 # pnpm store on the writable volume (rootfs is read-only at runtime).
 mkdir -p "${PNPM_HOME:-$DSH_HOME/.pnpm}"
 

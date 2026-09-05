@@ -26,6 +26,7 @@ RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/xdg-open && chmod +x /usr/loca
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml
+COPY agents-global.md            /opt/dsh-patches/agents-global.md
 COPY seed-omlx.sh /usr/local/bin/seed-omlx.sh
 COPY register-workspace.sh /usr/local/bin/register-workspace.sh
 COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
