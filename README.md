@@ -237,6 +237,29 @@ GIT_COMMITTER_EMAIL="you@example.com"
 These are passed through to the container; commits made inside use your
 identity.
 
+### safe.directory for bind-mounted repos
+
+Bind-mounted repos under `/workspace` are owned by the host uid, not the
+container's uid 1000, so git's `safe.directory` check would reject them as
+"dubious ownership". The fix is a system gitconfig baked into the image at
+build time:
+
+```ini
+# /etc/gitconfig (baked by the Dockerfile)
+[safe]
+	directory = /workspace
+```
+
+`docker-compose.yml` sets `GIT_CONFIG_SYSTEM=/etc/gitconfig` so git reads it.
+This replaced an earlier `GIT_CONFIG_COUNT=1` / `GIT_CONFIG_KEY_0` /
+`GIT_CONFIG_VALUE_0` env-var trio that broke inside dsh: dsh's command-spawn
+credential scrub (`dsh-subprocess`) strips any env-var whose **name** matches
+`/KEY|PASSWORD|SECRET|TOKEN/i`. `GIT_CONFIG_COUNT` survived the scrub but
+`GIT_CONFIG_KEY_0` was stripped, leaving git with a count of 1 and no key →
+`error: missing config key GIT_CONFIG_KEY_0`. `GIT_CONFIG_SYSTEM` survives
+the scrub (no sensitive keyword in the name) and is in dsh's bootstrap env
+allowlist, so it reaches both direct and agent-spawned git invocations.
+
 ### SSH keys for git push
 
 `~/.ssh` is deliberately not mounted. If the repo uses an SSH remote and you

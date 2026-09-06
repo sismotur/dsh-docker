@@ -23,6 +23,16 @@ RUN apt-get update \
 # file links open in the sidebar editor client-side and never reach this shim;
 # it remains as a harmless exit-0 fallback instead of raising spawn ENOENT.
 RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/xdg-open && chmod +x /usr/local/bin/xdg-open
+# System gitconfig baked at build time. Bind-mounted repos under /workspace
+# are owned by the host uid, not the container's uid 1000, so git's
+# safe.directory check would reject them. The rootfs is read-only at RUNTIME,
+# but this write happens during the build. dsh's command-spawn credential
+# scrub (dsh-subprocess) strips env-var names matching /KEY|PASSWORD|SECRET|
+# TOKEN/i, so the GIT_CONFIG_COUNT/KEY_0/VALUE_0 env-var trio broke (COUNT
+# survived the scrub, KEY_0 was stripped -> "missing config key GIT_CONFIG_KEY_0").
+# A baked system gitconfig read via GIT_CONFIG_SYSTEM (which survives the scrub)
+# fixes git for both direct and dsh-spawned invocations.
+RUN printf '[safe]\n\tdirectory = /workspace\n' > /etc/gitconfig
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml

@@ -32,11 +32,14 @@ x-dsh-base: &dsh-base
     - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
     - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
     # Bind-mounted repos are owned by the host uid, not the container's uid 1000.
-    # Git's safe.directory check would reject them; allow /workspace via env-var
-    # config (no .gitconfig file needed — the rootfs is read-only).
-    - GIT_CONFIG_COUNT=1
-    - GIT_CONFIG_KEY_0=safe.directory
-    - GIT_CONFIG_VALUE_0=/workspace
+    # Git's safe.directory check would reject them. A system gitconfig is baked
+    # into the image at build time (/etc/gitconfig, see Dockerfile) and pointed
+    # at here via GIT_CONFIG_SYSTEM. dsh's command-spawn credential scrub strips
+    # env-var names matching /KEY|PASSWORD|SECRET|TOKEN/i, so the previous
+    # GIT_CONFIG_COUNT/KEY_0/VALUE_0 trio broke: COUNT survived the scrub but
+    # KEY_0 was stripped -> "missing config key GIT_CONFIG_KEY_0". GIT_CONFIG_SYSTEM
+    # survives the scrub and is in dsh's bootstrap env allowlist.
+    - GIT_CONFIG_SYSTEM=/etc/gitconfig
 
 services:
   # LiteLLM proxy: auto-routes dsh requests to oMLX models by complexity.
