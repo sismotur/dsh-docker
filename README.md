@@ -348,17 +348,13 @@ on an older image, set `GIT_SSL_NO_VERIFY=1` (safe in the sandboxed container).
 
 ### Installed plugins
 
-#### dsh-better-sidebar (file editor, Git panel, browser)
+#### dsh-better-sidebar (file editor, Git panel, terminal, browser)
 
 The [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) plugin
 adds a full sidebar workspace to the dsh web UI: file explorer + CodeMirror
-editor, Git panel (diff/stage/commit), embedded browser, and background task
-view. It is installed in the web profile on the `dsh-home` volume.
-
-The plugin's terminal feature depends on `node-pty` (a native addon). It is
-**intentionally not compiled** — `node-pty` ships no Linux prebuilds (only
-darwin/win32), so the terminal tab does not function inside the Linux
-container. All other features (file editor, Git panel, browser) work normally.
+editor, Git panel (diff/stage/commit), embedded browser, terminal, and
+background task view. It is installed in the web profile on the `dsh-home`
+volume.
 
 **Open chat files in the sidebar** (`interceptOpenPath`, on by default): file
 links in chat (tool-row paths, produced-files row, mentions) open in the
@@ -369,13 +365,39 @@ clicks fell through to the no-op `xdg-open` shim). The 0.1.2-rc.1 upgrade
 activates it. Toggle it in Settings → Side card → "Open chat files in the
 sidebar".
 
-To skip the native build without erroring, pnpm's `allowBuilds` is set to
-`false` for `node-pty` in the profile's `pnpm-workspace.yaml`:
+##### Terminal tab (node-pty native addon)
 
-```yaml
-allowBuilds:
-  node-pty: false
+The terminal tab depends on `node-pty`, a native addon. `node-pty` 1.1.0
+ships prebuilds for darwin and win32 but **not for linux**, so the binary must
+be compiled from source. The runtime image has no build tools (kept minimal
+for hardening — no `python3`/`make`/`g++`), so `pty.node` is pre-compiled in
+the Docker **builder** stage and baked into the runtime image at
+`/opt/prebuilds/node-pty/pty.node`. pnpm's `allowBuilds: node-pty: false` in
+the profile's `pnpm-workspace.yaml` skips the compile at install time (it
+would fail without build tools); the prebuilt binary is injected afterward.
+
+node-pty uses N-API (ABI-stable), so the 81 KB binary loads across Node.js
+versions. The loader (`lib/utils.js`) checks `build/Release/pty.node` first,
+which is where the injection puts it. On Linux the native `pty.node` handles
+`forkpty()` directly; the `spawn-helper` binary the plugin's `ensureSpawnHelper`
+looks for is macOS-only and not needed.
+
+Enable the terminal after installing the plugin:
+
+```sh
+./run-dsh.sh plugin web add dsh-better-sidebar
+./run-dsh.sh enable-terminal   # injects pty.node; idempotent
 ```
+
+Then hard-refresh the browser (Cmd/Ctrl+Shift+R). The terminal tab opens a
+login shell (`-l`), resolved as an emulator would: an explicitly configured
+shell → `$SHELL` → the passwd login shell → `/bin/bash`.
+
+**Security**: the terminal runs a PTY in the same sandbox as the agent — same
+uid 1000, zero capabilities, read-only rootfs, seccomp filter. A PTY is a
+standard POSIX facility with no privilege escalation. The agent already has
+full command execution via the bash tool; the terminal adds interactivity
+with no expansion of the blast radius (still `/workspace` and `/data`).
 
 **Reinstall after a volume wipe** (`docker compose down -v`):
 
@@ -392,6 +414,9 @@ EOF'
 
 # 3. Install the plugin.
 ./run-dsh.sh plugin web add dsh-better-sidebar
+
+# 4. Inject the prebuilt node-pty binary to activate the terminal tab.
+./run-dsh.sh enable-terminal
 ```
 
 After installation, hard-refresh the browser (Cmd/Ctrl+Shift+R) to see the
@@ -595,5 +620,6 @@ and `/data`.
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless / plugin; starts litellm, accepts a project path).
+- `run-dsh.sh` — host wrapper (seed / web / headless / plugin / enable-terminal; starts litellm, accepts a project path).
+- `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
 - `.env.example` — API key and git identity template.

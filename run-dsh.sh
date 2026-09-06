@@ -7,6 +7,7 @@
 #   ./run-dsh.sh headless "..."    # one-shot headless job
 #   ./run-dsh.sh headless "..." <project>  # headless, with <project> at /workspace
 #   ./run-dsh.sh plugin web add <pkg>   # manage plugins (pnpm) in a profile
+#   ./run-dsh.sh enable-terminal         # inject prebuilt node-pty into dsh-better-sidebar
 set -e
 cd "$(dirname "$0")"
 # Mount a project dir at /workspace if a path argument is given.
@@ -59,8 +60,11 @@ case "${1:-}" in
   seed)
     docker compose run --rm --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless
     ;;
+  enable-terminal)
+    docker compose run --rm --entrypoint /usr/local/bin/enable-terminal.sh dsh-headless
+    ;;
   *)
-    echo "Usage: $0 {seed|web|headless \"<job>\"|plugin <profile> <pnpm args>}" >&2
+    echo "Usage: $0 {seed|web|headless \"<job>\"|plugin <profile> <pnpm args>|enable-terminal}" >&2
     exit 2
     ;;
 esac
