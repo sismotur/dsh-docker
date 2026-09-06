@@ -393,6 +393,24 @@ Then hard-refresh the browser (Cmd/Ctrl+Shift+R). The terminal tab opens a
 login shell (`-l`), resolved as an emulator would: an explicitly configured
 shell → `$SHELL` → the passwd login shell → `/bin/bash`.
 
+##### Customizing terminal aliases
+
+Edit `dsh-aliases.sh` in this repo to add, remove, or change the aliases and
+shell functions available in the terminal tab. The Dockerfile bakes it into
+`/etc/profile.d/dsh-aliases.sh`, which `/etc/profile` sources for bash login
+shells (the terminal spawns `bash -l`). It is NOT sourced by dsh's bash tool
+(non-login `bash -c`), so the aliases apply only to the interactive terminal.
+After editing, rebuild and restart:
+
+```sh
+docker compose build
+docker rm -f $(docker ps -q --filter name=dsh-web) 2>/dev/null
+./run-dsh.sh web
+```
+
+Only include aliases safe for the sandbox: no secrets, no destructive ops,
+no host-only paths, and no binaries absent from the image.
+
 **Security**: the terminal runs a PTY in the same sandbox as the agent — same
 uid 1000, zero capabilities, read-only rootfs, seccomp filter. A PTY is a
 standard POSIX facility with no privilege escalation. The agent already has
