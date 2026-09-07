@@ -10,7 +10,7 @@
 #   ./run-dsh.sh plugin web add <pkg>   # manage plugins (pnpm) in a profile
 #   ./run-dsh.sh enable-terminal         # inject prebuilt node-pty into dsh-better-sidebar
 #   ./run-dsh.sh sessions               # list recent dsh sessions (id, turns, title)
-#   ./run-dsh.sh runs [latest|<substr>] # list or cat headless run logs
+#   ./run-dsh.sh runs [latest|<substr>|clean [N]]  # list, cat, or prune run logs (default keep 10)
 #   ./run-dsh.sh logs [latest|<substr>] # follow a live background job, or cat it once finished
 #   ./run-dsh.sh status                 # stack status: containers, litellm, oMLX, volume usage
 set -e
@@ -188,6 +188,27 @@ case "${1:-}" in
       L=$(ls -1t runs/*.log 2>/dev/null | head -1)
       if [ ! -f "$L" ]; then echo "No run logs." >&2; exit 1; fi
       cat "$L"
+    elif [ "$ARG" = "clean" ]; then
+      KEEP="${3:-10}"
+      case "$KEEP" in ''|*[!0-9]*) echo "Invalid keep count: $KEEP" >&2; exit 2 ;; esac
+      if ! ls runs/*.log >/dev/null 2>&1; then
+        echo "No run logs to clean."
+      else
+        _rc_kept=0; _rc_removed=0
+        for f in $(ls -1t runs/*.log); do
+          cidf="${f%.log}.cid"
+          # Never prune a log whose background job is still running.
+          if [ -f "$cidf" ] && docker inspect "$(cat "$cidf")" >/dev/null 2>&1; then
+            continue
+          fi
+          _rc_kept=$((_rc_kept + 1))
+          if [ "$_rc_kept" -gt "$KEEP" ]; then
+            rm -f "$f" "$cidf"
+            _rc_removed=$((_rc_removed + 1))
+          fi
+        done
+        echo "Pruned $_rc_removed run log(s); kept newest $KEEP."
+      fi
     else
       case "$ARG" in */*) echo "Invalid log name." >&2; exit 2 ;; esac
       L=$(ls -1 runs/*"$ARG"* 2>/dev/null | head -1)
@@ -246,7 +267,7 @@ case "${1:-}" in
     docker compose run --rm --no-deps --entrypoint sh dsh-headless -c 'du -sh /data 2>/dev/null' 2>/dev/null || echo "unknown"
     ;;
   *)
-    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>]|logs [latest|<substr>]|status}" >&2
+    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|status}" >&2
     exit 2
     ;;
 esac

@@ -325,10 +325,13 @@ upgrade.
 ./run-dsh.sh runs                # list run logs (newest first); [running] tags live jobs
 ./run-dsh.sh runs latest         # print the most recent run log
 ./run-dsh.sh runs <substr>       # print a log whose name contains <substr>
+./run-dsh.sh runs clean [N]      # prune all but the newest N logs (default 10); live jobs skipped
 ```
 
-`runs/` is gitignored. Web (interactive) runs are not logged — only headless
-(unattended) runs, which is where lost output matters.
+`runs clean` prunes old logs, keeping the newest N (default 10); a log whose
+background job is still running is never pruned. `runs/` is gitignored. Web
+(interactive) runs are not logged — only headless (unattended) runs, which is
+where lost output matters.
 
 ## Working on existing projects
 
