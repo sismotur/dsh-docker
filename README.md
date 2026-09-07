@@ -3,6 +3,38 @@
 Runs the DeepSeek harness CLI (`@deepseek-ai/dsh`) inside a locked-down
 container instead of bare-metal on the host.
 
+## Table of contents
+
+- [Why](#why)
+- [Hardening configuration](#hardening-configuration)
+- [Permission model and fail-safe defaults](#permission-model-and-fail-safe-defaults)
+- [Prerequisites](#prerequisites)
+- [Deployment](#deployment)
+- [Starting and stopping](#starting-and-stopping)
+  - [Web profile](#web-profile-long-running-interactive)
+  - [Headless profile](#headless-profile-one-shot)
+  - [Background headless jobs](#background-headless-jobs)
+  - [Cancelling a background job](#cancelling-a-background-job)
+  - [Checking what is running](#checking-what-is-running)
+  - [First-run readiness check](#first-run-readiness-check)
+  - [Debugging inside the container](#debugging-inside-the-container)
+  - [Cleaning up](#cleaning-up-containers-volume-image)
+  - [Session history](#session-history)
+  - [Run logs](#run-logs)
+- [Task templates](#task-templates)
+- [Working on existing projects](#working-on-existing-projects)
+  - [Project aliases](#project-aliases)
+  - [Git identity](#git-identity)
+  - [Security tradeoffs](#security-tradeoffs)
+- [Plugins](#plugins)
+- [MCP servers](#mcp-servers)
+- [LiteLLM router](#litellm-router-auto-model-selection)
+- [oMLX config](#omlx-config)
+- [Security audit](#security-audit)
+- [Security invariants](#security-invariants)
+- [Validating hardening](#validating-hardening)
+- [Files](#files)
+
 ## Why
 
 Bare-metal dsh is a full agent harness: it runs arbitrary bash, reads/writes
@@ -459,7 +491,7 @@ your real repo — no clone, no copy, no syncing:
 ### Project aliases
 
 For repos under `~/Development`, a short alias works anywhere `<project>` is
-accepted (`web`, `headless`, `headless --bg`), saving the full path:
+accepted (`web`, `headless`, `headless --bg`, `task`), saving the full path:
 
 ```sh
 ./run-dsh.sh web api
