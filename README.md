@@ -886,7 +886,7 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / status; starts litellm, accepts a project path, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary).
+- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / stop / status; starts litellm, accepts a project path or alias, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary, auto-copies the web token URL to the clipboard, and fires a macOS notification when a background job finishes).
 - `list-sessions.js` — in-container helper (bind-mounted read-only) that lists dsh sessions from the session-projection cache; invoked by `./run-dsh.sh sessions`.
 - `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
 - `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.
