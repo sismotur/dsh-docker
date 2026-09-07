@@ -295,6 +295,34 @@ the stale sidecar is cleaned up instead. The log file in `runs/` is kept —
 docker compose ps       # list active containers only
 ```
 
+### First-run readiness check
+
+```sh
+./run-dsh.sh doctor
+```
+
+A single command that verifies everything needed before a headless or web run:
+image built, `.env` present with `DEEPSEEK_API_KEY` set, git identity configured,
+`workspace/` dir exists, oMLX patches seeded into the `dsh-home` volume,
+`litellm-config.yaml` present, LiteLLM reachable, oMLX reachable with at least
+one model. Each item prints `OK`, `FAIL`, or `WARN` with a fix hint. Exits
+non-zero if any `FAIL` remains, so it can gate a pre-flight check.
+
+### Debugging inside the container
+
+```sh
+./run-dsh.sh exec                # interactive sh shell inside a fresh hardened container
+./run-dsh.sh exec ls /data       # run a one-off command
+./run-dsh.sh exec sh -c 'id; pwd'  # run a shell snippet
+```
+
+Runs an arbitrary command in a fresh hardened container with the same
+confinement as a headless job (non-root, zero caps, read-only rootfs,
+`/workspace` and `/data` writable). The container's default entrypoint (dsh)
+is overridden, so you get a raw shell — useful for inspecting `/data`,
+checking installed plugins, or debugging patches without rebuilding. Uses
+`--no-deps` so it never starts LiteLLM. The container is removed on exit.
+
 ### Cleaning up (containers, volume, image)
 
 ```sh
@@ -886,7 +914,7 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / stop / status; starts litellm, accepts a project path or alias, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary, auto-copies the web token URL to the clipboard, and fires a macOS notification when a background job finishes).
+- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / stop / exec / doctor / status; starts litellm, accepts a project path or alias, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary, auto-copies the web token URL to the clipboard, and fires a macOS notification when a background job finishes).
 - `list-sessions.js` — in-container helper (bind-mounted read-only) that lists dsh sessions from the session-projection cache; invoked by `./run-dsh.sh sessions`.
 - `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
 - `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.

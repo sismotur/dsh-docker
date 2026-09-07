@@ -14,6 +14,8 @@
 #   ./run-dsh.sh runs [latest|<substr>|clean [N]]  # list, cat, or prune run logs (default keep 10)
 #   ./run-dsh.sh logs [latest|<substr>] # follow a live background job, or cat it once finished
 #   ./run-dsh.sh stop [latest|<substr>] # cancel a live background job (docker rm -f)
+#   ./run-dsh.sh exec [cmd...]          # run a command in a fresh hardened container (default: sh)
+#   ./run-dsh.sh doctor                 # first-run readiness check (image, .env, patches, stack)
 #   ./run-dsh.sh status                 # stack status: containers, litellm, oMLX, volume usage
 set -e
 cd "$(dirname "$0")"
@@ -333,8 +335,107 @@ case "${1:-}" in
     printf 'dsh-home volume usage:            '
     docker compose run --rm --no-deps --entrypoint sh dsh-headless -c 'du -sh /data 2>/dev/null' 2>/dev/null || echo "unknown"
     ;;
+  exec)
+    shift
+    if [ $# -eq 0 ]; then
+      docker compose run --rm --no-deps --entrypoint sh dsh-headless
+    else
+      _exec_cmd="$1"; shift
+      docker compose run --rm --no-deps --entrypoint "$_exec_cmd" dsh-headless "$@"
+    fi
+    ;;
+  doctor)
+    _dr_fail=0; _dr_warn=0; _dr_img=0
+    _dr_p() {
+      printf '  %-26s %-4s' "$2" "$1"
+      if [ -n "$3" ]; then printf '  %s' "$3"; fi
+      printf '\n'
+    }
+    echo '[dsh doctor] checking readiness...'
+    echo
+    if docker image inspect dsh-hardened:latest >/dev/null 2>&1; then
+      _dr_p OK 'image built'; _dr_img=1
+    else
+      _dr_p FAIL 'image built' 'run: docker compose build'
+      _dr_fail=$((_dr_fail + 1))
+    fi
+    if [ -f .env ]; then
+      _dr_p OK '.env present'
+    else
+      _dr_p FAIL '.env present' 'run: cp .env.example .env'
+      _dr_fail=$((_dr_fail + 1))
+    fi
+    if [ -f .env ] && grep -qE '^DEEPSEEK_API_KEY=.+' .env && ! grep -q '^DEEPSEEK_API_KEY=changeme$' .env; then
+      _dr_p OK 'DEEPSEEK_API_KEY set'
+    else
+      _dr_p FAIL 'DEEPSEEK_API_KEY set' 'set it in .env'
+      _dr_fail=$((_dr_fail + 1))
+    fi
+    if [ -f .env ] && grep -qE '^GIT_AUTHOR_NAME=.+' .env && grep -qE '^GIT_AUTHOR_EMAIL=.+' .env; then
+      _dr_p OK 'git identity set'
+    else
+      _dr_p WARN 'git identity set' 'GIT_AUTHOR_NAME/EMAIL not in .env'
+      _dr_warn=$((_dr_warn + 1))
+    fi
+    if [ -d workspace ]; then
+      _dr_p OK 'workspace/ dir exists'
+    else
+      _dr_p WARN 'workspace/ dir exists' 'run: mkdir -p workspace'
+      _dr_warn=$((_dr_warn + 1))
+    fi
+    # Only probe the volume if the image exists, to avoid a slow/hanging build.
+    if [ "$_dr_img" = 1 ]; then
+      if docker compose run --rm --no-deps --entrypoint sh dsh-headless \
+          -c 'test -f /data/profiles/headless/cordis.patch.yml' >/dev/null 2>&1; then
+        _dr_p OK 'patches seeded'
+      else
+        _dr_p FAIL 'patches seeded' 'run: ./run-dsh.sh seed'
+        _dr_fail=$((_dr_fail + 1))
+      fi
+    else
+      _dr_p SKIP 'patches seeded' 'skipped (image not built)'
+    fi
+    if [ -f litellm-config.yaml ]; then
+      _dr_p OK 'litellm-config.yaml present'
+    else
+      _dr_p FAIL 'litellm-config.yaml present' 'missing from repo'
+      _dr_fail=$((_dr_fail + 1))
+    fi
+    if curl -fsS -m 3 http://127.0.0.1:4000/health/liveliness >/dev/null 2>&1; then
+      _dr_p OK 'litellm reachable'
+    else
+      _dr_p WARN 'litellm reachable' 'run: docker compose up -d litellm'
+      _dr_warn=$((_dr_warn + 1))
+    fi
+    if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
+      _dr_p OK 'oMLX reachable'
+      if command -v jq >/dev/null 2>&1; then
+        _dr_n=$(printf '%s' "$OMLX_MODELS" | jq -r '.data[]?.id' 2>/dev/null | grep -c . || true)
+        if [ "$_dr_n" -gt 0 ] 2>/dev/null; then
+          _dr_p OK 'oMLX models' "$_dr_n available"
+        else
+          _dr_p WARN 'oMLX models' 'none listed'
+          _dr_warn=$((_dr_warn + 1))
+        fi
+      else
+        _dr_p OK 'oMLX models' '(jq not installed to count)'
+      fi
+    else
+      _dr_p WARN 'oMLX reachable' 'start the local oMLX server'
+      _dr_warn=$((_dr_warn + 1))
+    fi
+    echo
+    if [ "$_dr_fail" -gt 0 ]; then
+      echo "$_dr_fail failure(s), $_dr_warn warning(s). Fix the failures before running jobs."
+      exit 1
+    elif [ "$_dr_warn" -gt 0 ]; then
+      echo "0 failures, $_dr_warn warning(s). Ready, but review the warnings."
+    else
+      echo "All checks passed. Ready to run."
+    fi
+    ;;
   *)
-    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|stop [latest|<substr>]|status}" >&2
+    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|stop [latest|<substr>]|exec [cmd...]|doctor|status}" >&2
     echo "  <project> may be a path or alias (api|android|ios|inventrip|signing)" >&2
     exit 2
     ;;
