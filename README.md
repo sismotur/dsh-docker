@@ -344,6 +344,25 @@ your real repo — no clone, no copy, no syncing:
 ./run-dsh.sh headless "fix the login bug" ~/Development/inventrip_api
 ```
 
+### Project aliases
+
+For repos under `~/Development`, a short alias works anywhere `<project>` is
+accepted (`web`, `headless`, `headless --bg`), saving the full path:
+
+```sh
+./run-dsh.sh web api
+./run-dsh.sh headless --bg "run the tests" android
+```
+
+- `api` → `~/Development/inventrip_api`
+- `android` → `~/Development/inventrip_android2`
+- `ios` → `~/Development/inventrip_ios2`
+- `inventrip` → `~/Development/inventrip3`
+- `signing` → `~/Development/signing4`
+
+A literal path still works — aliases are resolved first, and anything else
+is passed through to the bind-mount unchanged.
+
 The agent sees the repo at `/workspace`, with full read/write access to your
 uncommitted changes, branches, and git history. Edits land on the real files
 on your host immediately.

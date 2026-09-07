@@ -7,6 +7,7 @@
 #   ./run-dsh.sh headless "..."    # one-shot headless job
 #   ./run-dsh.sh headless "..." <project>  # headless, with <project> at /workspace
 #   ./run-dsh.sh headless --bg "..." [project]  # same, detached; check back with logs/runs
+#   <project> = a path or an alias: api | android | ios | inventrip | signing
 #   ./run-dsh.sh plugin web add <pkg>   # manage plugins (pnpm) in a profile
 #   ./run-dsh.sh enable-terminal         # inject prebuilt node-pty into dsh-better-sidebar
 #   ./run-dsh.sh sessions               # list recent dsh sessions (id, turns, title)
@@ -35,6 +36,19 @@ mount_project() {
   abs=$(cd "$p" && pwd)
   name=$(basename "$abs")
   echo "-v $abs:/workspace -e WORKSPACE_NAME=$name"
+}
+
+# Expand a short project alias to its full path, or pass it through unchanged
+# so a literal path still works. All aliases live under $HOME/Development.
+resolve_project() {
+  case "$1" in
+    api)       printf '%s' "$HOME/Development/inventrip_api" ;;
+    android)   printf '%s' "$HOME/Development/inventrip_android2" ;;
+    ios)       printf '%s' "$HOME/Development/inventrip_ios2" ;;
+    inventrip) printf '%s' "$HOME/Development/inventrip3" ;;
+    signing)   printf '%s' "$HOME/Development/signing4" ;;
+    *)         printf '%s' "$1" ;;
+  esac
 }
 
 # Ensure the LiteLLM router is running before dsh starts.
@@ -129,7 +143,7 @@ run_headless_bg() {
 case "${1:-}" in
   web)
     ensure_router
-    MNT=$(mount_project "${2:-}")
+    MNT=$(mount_project "$(resolve_project "${2:-}")")
     # The web entrypoint runs dsh on 127.0.0.1 (safety) and socat-proxies
     # 0.0.0.0:8080 so Docker can publish the port. --service-ports publishes.
     # shellcheck disable=SC2086
@@ -141,12 +155,12 @@ case "${1:-}" in
     if [ "${1:-}" = "--bg" ]; then
       shift
       JOB="$1"; shift
-      MNT=$(mount_project "${1:-}")
+      MNT=$(mount_project "$(resolve_project "${1:-}")")
       preflight_headless || exit 1
       run_headless_bg "$JOB"
     else
       JOB="$1"; shift
-      MNT=$(mount_project "${1:-}")
+      MNT=$(mount_project "$(resolve_project "${1:-}")")
       preflight_headless || exit 1
       run_headless_logged "$JOB"
     fi
@@ -268,6 +282,7 @@ case "${1:-}" in
     ;;
   *)
     echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|status}" >&2
+    echo "  <project> may be a path or alias (api|android|ios|inventrip|signing)" >&2
     exit 2
     ;;
 esac
