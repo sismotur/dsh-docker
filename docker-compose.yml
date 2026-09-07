@@ -40,6 +40,13 @@ x-dsh-base: &dsh-base
     # KEY_0 was stripped -> "missing config key GIT_CONFIG_KEY_0". GIT_CONFIG_SYSTEM
     # survives the scrub and is in dsh's bootstrap env allowlist.
     - GIT_CONFIG_SYSTEM=/etc/gitconfig
+    # Self-declare the isolation platform so any agent/MCP tooling inside the
+    # container can detect the sandbox and skip host-only behavior (GUI opens,
+    # host paths, host-only CLIs). Mirrors Warp's WARP_ISOLATION_PLATFORM env
+    # var; /.dockerenv already exists implicitly, but an explicit declaration
+    # is clearer and survives non-Docker runtimes.
+    - DSH_ISOLATION_PLATFORM=docker
+    - IS_SANDBOXED=1
 
 services:
   # LiteLLM proxy: auto-routes dsh requests to oMLX models by complexity.

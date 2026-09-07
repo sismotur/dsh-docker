@@ -1,0 +1,9 @@
+{
+  "name": "dsh-pty-build",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned, integrity-verified dependency tree for the node-pty native-addon compile in the dsh-hardened builder stage. The committed package-lock.json is the source of truth; the Dockerfile installs it with `npm ci`, which both verifies the node-pty tarball by integrity hash and runs its build script to compile pty.node from source (node-pty ships no Linux prebuild).",
+  "dependencies": {
+    "node-pty": "1.1.0"
+  }
+}

@@ -4,3 +4,8 @@
 # Runtime workspace bind-mount contents (kept empty via .gitkeep)
 workspace/*
 !workspace/.gitkeep
+
+# node_modules from the builder-stage lockfile dirs (global-tools, pty-build).
+# Only package.json + package-lock.json are committed; installs run inside the
+# Docker builder, never on the host.
+node_modules/

@@ -90,6 +90,56 @@ For an extra escape barrier, enable Docker Desktop **Enhanced Container
 Isolation** (Settings -> Features) to run the container under a user-space
 kernel (gVisor), blocking escapes even on a kernel CVE.
 
+## Permission model and fail-safe defaults
+
+dsh enforces its own permission layer on top of this container's OS-level
+confinement. It exposes two independent knobs, bundled into named presets that
+a user switches with the `/permission` command:
+
+- **Sandbox mode** — `read-only` | `workspace-write` | `danger-full-access`
+  (how far the bash executor lets writes escape).
+- **Approval policy** — `ask` | `never` (whether each action needs human
+  confirmation).
+
+The shipped preset table has two entries:
+
+- **`workspace-write`** — sandbox `workspace-write` + approval `ask`. This is
+  the **default**: writes confined to the workspace, every action approved.
+- **`danger-full-access`** — sandbox `danger-full-access` + approval `never`.
+  Full access, no confirmation. The permissive end.
+
+### Fail-safe posture
+
+The design fails closed — an unknown or unset permission resolves to the
+restrictive value, never to allow (the same principle behind Warp's execution
+profiles):
+
+- **No relaxing env var is injected.** The container sets only
+  `DEEPSEEK_API_KEY`, the git-identity vars, `GIT_CONFIG_SYSTEM`,
+  `DSH_ISOLATION_PLATFORM`, and `IS_SANDBOXED`. None widens the sandbox or
+  suppresses approval, so dsh's restrictive default (`workspace-write` +
+  `ask`) holds for every fresh session.
+- **Switching to `danger-full-access` is a deliberate, in-session act** via
+  `/permission`, recorded as durable user intent — never a build-time or env
+  default.
+- **The credential scrub is fail-closed.** `dsh-subprocess` strips any
+  env-var whose **name** matches `/KEY|PASSWORD|SECRET|TOKEN/i` before
+  spawning commands. It removes on match and keeps only verified survivors,
+  so a mis-typed secret name is dropped, not leaked.
+
+### Defense in depth
+
+dsh's `workspace-write` sandbox is enforced *on top of* the container's
+OS-level confinement (read-only rootfs, `cap_drop: ALL`, `no-new-privileges`,
+uid 1000). Even a session running `danger-full-access` cannot escape the
+container: the blast radius stays `/workspace` and `/data`.
+
+### Rule for future changes
+
+Any new autonomy or approval knob must default to the restrictive end (`ask`
+or `workspace-write`) unless deliberately opted in. Never inject a setting
+that relaxes approval or widens the sandbox as a build or env default.
+
 ## Prerequisites
 
 - Docker Desktop running.
@@ -629,9 +679,60 @@ container. All root-privilege escalation vectors are neutralized:
 No root privileges are exposed. The blast radius is limited to `/workspace`
 and `/data`.
 
+## Security invariants
+
+The testable properties the hardened image guarantees. Each is phrased as an
+invariant that must hold after every build; a planned `test-hardening.sh`
+(deferred) will assert them automatically. They are verified today by the
+smoke commands in [Deployment §5](#5-verify-the-deployment) and the
+[Security audit](#security-audit) above.
+
+**Runtime (docker-compose.yml)**
+
+1. Runs as uid 1000, never root — `id` reports `uid=1000(node)`.
+2. Zero effective capabilities — `CapEff: 0000000000000000`.
+3. Zero bounding capabilities — `CapBnd: 0000000000000000`.
+4. `NoNewPrivs: 1` — setuid binaries cannot escalate.
+5. Root filesystem read-only — writes to `/` and `/etc` fail.
+6. Only three writable paths: `/tmp` (tmpfs, `noexec,nosuid`, 64 MB), `/data`
+   (named volume), `/workspace` (bind mount).
+7. `/tmp` is `noexec` — no binary execution from tmpfs.
+8. No host secrets mounted — `~/.ssh`, `~/.aws`, `~/.config`, browser dirs
+   are not exposed.
+9. Web port loopback-only — `127.0.0.1:8080`, never the network.
+10. Resource-bounded — `cpus: 4`, `mem_limit: 4g`, `pids_limit: 512`.
+
+**Build (Dockerfile)**
+
+11. No setuid/setgid binaries — `find / -xdev -perm /6000` returns nothing.
+12. Build tools (`python3`, `make`, `g++`) exist only in the builder stage;
+    the runtime ships none.
+13. `/etc/gitconfig` baked with `safe.directory = /workspace` so bind-mounted
+    repos pass git's ownership check.
+14. `npm_config_ignore_scripts=true` in the runtime — npm/pnpm lifecycle
+    scripts blocked by default (rogue-plugin supply-chain gate).
+
+**Permission (dsh + container)**
+
+15. dsh's default preset is `workspace-write` (sandboxed + `ask`) — the
+    restrictive end; `danger-full-access` is opt-in per session.
+16. No container env var relaxes approval or widens the sandbox.
+17. `dsh-subprocess` scrubs env-vars matching `/KEY|PASSWORD|SECRET|TOKEN/i`
+    on every command spawn (fail-closed).
+
+**Supply chain (lockfiles)**
+
+18. The builder installs `global-tools` and `pty-build` with `npm ci` from
+    committed `package-lock.json` files — every tarball fetched by sha512
+    integrity hash, no "latest" resolution at build time.
+19. `node-pty` is compiled from a verified tarball in the builder; only the
+    81 KB `pty.node` binary crosses into the read-only runtime.
+
 ## Files
 
 - `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools + MCP memory server, build tools excluded).
+- `global-tools/` — pinned, integrity-verified dependency tree (`package.json` + `package-lock.json`) for the builder-stage global tools (dsh, pnpm, MCP memory server); installed via `npm ci`.
+- `pty-build/` — pinned, integrity-verified dependency tree (`package.json` + `package-lock.json`) for the node-pty native-addon compile; installed via `npm ci`.
 - `docker-compose.yml` — hardened service definitions (dsh + litellm router).
 - `litellm-config.yaml` — LiteLLM proxy config: model list, auto router tiers, fallbacks.
 - `web-entrypoint.sh` — web entrypoint: dsh on loopback + socat proxy + token-URL port rewrite.

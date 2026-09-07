@@ -7,15 +7,27 @@ FROM node:25-slim AS builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
-RUN npm i -g @deepseek-ai/dsh@0.1.2-rc.1 pnpm @modelcontextprotocol/server-memory
-# Pre-compile node-pty's Linux native addon. node-pty (a dependency of
-# dsh-better-sidebar) ships prebuilds for darwin/win32 but not linux, so it
-# must be compiled from source. The runtime image has no build tools (kept
-# minimal for hardening), so the 81 KB pty.node is compiled here and copied
-# to runtime; enable-terminal.sh injects it into the plugin's node-pty at
-# install time. node-pty uses N-API (ABI-stable), so the binary loads across
-# Node.js versions.
-RUN cd /tmp && npm init -y && npm install node-pty@1.1.0
+# Install the global tools (dsh, pnpm, MCP memory server) from a committed,
+# integrity-verified lockfile. `npm ci` fetches every tarball by the sha512
+# hash recorded in global-tools/package-lock.json instead of resolving "latest"
+# at build time, so the supply-chain tree is reproducible and auditable (no
+# silent version drift, no unverified tarball). The tree installs into a local
+# node_modules; the runtime stage copies it to the global location, producing
+# the same flat layout `npm i -g` would have.
+WORKDIR /opt/global-tools
+COPY global-tools/package.json global-tools/package-lock.json ./
+RUN npm ci
+# Pre-compile node-pty's Linux native addon from a committed, integrity-verified
+# lockfile. node-pty (a dependency of dsh-better-sidebar) ships prebuilds for
+# darwin/win32 but not linux, so it must be compiled from source. The runtime
+# image has no build tools (kept minimal for hardening), so the 81 KB pty.node
+# is compiled here and copied to runtime; enable-terminal.sh injects it into
+# the plugin's node-pty at install time. node-pty uses N-API (ABI-stable), so
+# the binary loads across Node.js versions. `npm ci` verifies the node-pty
+# tarball by integrity hash before running its build script to compile it.
+WORKDIR /opt/pty-build
+COPY pty-build/package.json pty-build/package-lock.json ./
+RUN npm ci
 
 FROM node:25-slim AS runtime
 # socat: TCP proxy so Docker can publish the web port. dsh refuses --host
@@ -61,10 +73,10 @@ RUN chmod +x /usr/local/bin/seed-omlx.sh /usr/local/bin/register-workspace.sh /u
 COPY dsh-aliases.sh /etc/profile.d/dsh-aliases.sh
 # Prebuilt node-pty binary from the builder stage. Injected into the
 # dsh-better-sidebar plugin's node-pty by enable-terminal.sh.
-COPY --from=builder /tmp/node_modules/node-pty/build/Release/pty.node /opt/prebuilds/node-pty/pty.node
+COPY --from=builder /opt/pty-build/node_modules/node-pty/build/Release/pty.node /opt/prebuilds/node-pty/pty.node
 # dsh global install from builder. Recreate the npm symlink so ESM module
 # resolution stays relative to the real package path.
-COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=builder /opt/global-tools/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/local/bin/dsh
 # pnpm for dsh plugin management. Store + global bin live on the writable
 # DSH_HOME volume (not the read-only rootfs). Postinstall scripts are blocked
