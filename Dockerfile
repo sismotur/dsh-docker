@@ -24,7 +24,11 @@ FROM node:25-slim AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        socat git ca-certificates curl jq less ripgrep openssh-client \
+       vim bat \
     && rm -rf /var/lib/apt/lists/*
+# Debian's bat package installs the binary as `batcat` (name conflict), so
+# symlink it to `bat` for parity with the host alias `alias bat="bat -p"`.
+RUN ln -s /usr/bin/batcat /usr/local/bin/bat
 # No-op xdg-open: a fallback for any residual native file-open gesture.
 # Containers cannot reach the host GUI, so a real opener is impossible. With
 # dsh 0.1.2+ and dsh-better-sidebar's interceptOpenPath (on by default), chat

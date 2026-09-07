@@ -7,8 +7,8 @@
 # Adapted from the host ~/.zsh_aliases. Excluded: secrets (DB passwords, API
 # tokens), destructive ops (drop/restore database, kill -9), host-only paths
 # (~/Development/...), macOS-only tools (brew, defaults, open, Finder), and
-# commands whose binaries are absent from this image (eza, bat, gh, python3,
-# docker, json-server, mogrify, redis-cli, kubectl, gcloud).
+# commands whose binaries are absent from this image (eza, gh, python3, docker,
+# json-server, mogrify, redis-cli, kubectl, gcloud).
 
 #############################
 # GIT
@@ -38,8 +38,31 @@ alias h='history 100'
 alias c='clear'
 alias numFolders='find . -type d -maxdepth 1 -mindepth 1 | wc -l'
 alias less='less -R'
+alias bat='bat -p'   # plain output (no decorations); use `bat --paging=never` to disable the pager
 
-# find files matching a regex (relative paths)
+#############################
+# RIPGREP — fast file/content search (replaces find + grep)
+#############################
+
+# rg is already installed; these wrappers cover common "find" use cases.
+# All accept an optional second arg for the search path (defaults to .).
+
+# list all files (like `find . -type f`)
+rgfiles() { rg --files "${2:-.}"; }
+
+# find files by name pattern, case-insensitive (like `find . -iname '*pattern*'`)
+rgname() { rg --files "${2:-.}" | rg -i "$1"; }
+
+# find files by extension (like `find . -name '*.py'`)
+rgext() { rg --files -g "*.${1}" "${2:-.}"; }
+
+# find files containing text (like `grep -rl 'pattern' .`)
+rgcontains() { rg -l "$1" "${2:-.}"; }
+
+# count matches per file (like `grep -rc 'pattern' .`)
+rgcount() { rg -c "$1" "${2:-.}"; }
+
+# find files matching a regex (relative paths) — legacy, kept for host parity
 find_files_regex() {
   find . -type f | grep -E "$1"
 }
