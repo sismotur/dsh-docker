@@ -395,6 +395,55 @@ background job is still running is never pruned. `runs/` is gitignored. Web
 (interactive) runs are not logged — only headless (unattended) runs, which is
 where lost output matters.
 
+## Task templates
+
+Reusable headless job prompts live in `templates/` as Markdown files. Each
+file is a self-contained prompt the wrapper reads and passes to dsh as the
+job text — no retyping common jobs, and the prompt is versioned and
+reproducible.
+
+```sh
+./run-dsh.sh task                     # list available templates
+./run-dsh.sh task review api           # run the 'review' template against the api repo
+./run-dsh.sh task --bg secaudit api    # same, detached; check with logs/runs
+```
+
+`<project>` accepts the same path or alias as `headless` (see
+[Project aliases](#project-aliases)). With `--bg`, the job runs detached
+with the full background lifecycle (notification, `logs`, `runs`, `stop`).
+
+### Built-in templates
+
+- `test` — run the test suite, report failures with file:line, propose and
+  apply minimal fixes, re-run to confirm.
+- `lint` — run the linter, auto-fix what it can, list the rest with rule and
+  suggested fix.
+- `review` — review uncommitted changes for security, error handling,
+  resource leaks, race conditions, style. End with APPROVE / REQUEST CHANGES
+  / BLOCK.
+- `explore` — map the architecture (entry points, request flow, state
+  storage, test setup, deps) to `EXPLORE.md`.
+- `deadcode` — find unused exports, unreferenced files, unreachable
+  branches, orphan dependencies. List before any deletion.
+- `typings` — add type annotations where inferable; flag ambiguous ones
+  with a comment. Runtime behavior unchanged.
+- `changelog` — read commits since the last tag, draft a changelog grouped
+  by Added / Changed / Fixed / Removed / Deprecated to `CHANGELOG-draft.md`.
+- `apidocs` — scan route handlers, document method, path, auth, params,
+  responses, errors to `API-docs.md`.
+- `triage` — find the most recent failing test output, trace root cause,
+  propose a minimal fix with exact code. Propose only — no changes applied.
+- `secaudit` — audit for hardcoded secrets, SQL/command injection, path
+  traversal, unsafe deserialization, missing auth, insecure crypto. Sorted
+  by severity.
+
+### Adding custom templates
+
+Drop a `.md` file in `templates/` — the first line should be a `# Title`
+(surfaced by `./run-dsh.sh task` as the description). The rest is the prompt
+dsh receives as its job text. No rebuild needed; templates are read from
+the host at run time.
+
 ## Working on existing projects
 
 To work on an existing repo, pass its path as an extra argument. The wrapper
@@ -914,7 +963,8 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / stop / exec / doctor / status; starts litellm, accepts a project path or alias, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary, auto-copies the web token URL to the clipboard, and fires a macOS notification when a background job finishes).
+- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / stop / exec / task / doctor / status; starts litellm, accepts a project path or alias, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary, auto-copies the web token URL to the clipboard, and fires a macOS notification when a background job finishes).
+- `templates/` — reusable headless job prompts (test, lint, review, explore, deadcode, typings, changelog, apidocs, triage, secaudit); invoked by `./run-dsh.sh task <name> [project]`.
 - `list-sessions.js` — in-container helper (bind-mounted read-only) that lists dsh sessions from the session-projection cache; invoked by `./run-dsh.sh sessions`.
 - `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
 - `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.

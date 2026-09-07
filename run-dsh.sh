@@ -15,6 +15,7 @@
 #   ./run-dsh.sh logs [latest|<substr>] # follow a live background job, or cat it once finished
 #   ./run-dsh.sh stop [latest|<substr>] # cancel a live background job (docker rm -f)
 #   ./run-dsh.sh exec [cmd...]          # run a command in a fresh hardened container (default: sh)
+#   ./run-dsh.sh task <name> [project]  # run a headless job from a template in templates/
 #   ./run-dsh.sh doctor                 # first-run readiness check (image, .env, patches, stack)
 #   ./run-dsh.sh status                 # stack status: containers, litellm, oMLX, volume usage
 set -e
@@ -344,6 +345,45 @@ case "${1:-}" in
       docker compose run --rm --no-deps --entrypoint "$_exec_cmd" dsh-headless "$@"
     fi
     ;;
+  task)
+    shift
+    _task_bg=0
+    if [ "${1:-}" = "--bg" ]; then
+      shift
+      _task_bg=1
+    fi
+    _task_name="${1:-}"
+    if [ -z "$_task_name" ]; then
+      echo "Available templates:"
+      if ls templates/*.md >/dev/null 2>&1; then
+        for f in templates/*.md; do
+          name=$(basename "$f" .md)
+          desc=$(head -1 "$f" | sed 's/^#[[:space:]]*//')
+          printf '  %-14s %s\n' "$name" "$desc"
+        done
+      else
+        echo "  (none — add .md files to templates/)"
+      fi
+      exit 0
+    fi
+    shift
+    _task_file="templates/${_task_name}.md"
+    if [ ! -f "$_task_file" ]; then
+      echo "Error: template not found: $_task_file" >&2
+      echo "Available templates:" >&2
+      ls templates/*.md 2>/dev/null | sed 's#templates/##;s#\.md$##' | sed 's/^/  /' >&2
+      exit 1
+    fi
+    JOB=$(cat "$_task_file")
+    ensure_router
+    MNT=$(mount_project "$(resolve_project "${1:-}")")
+    preflight_headless || exit 1
+    if [ "$_task_bg" = 1 ]; then
+      run_headless_bg "$JOB"
+    else
+      run_headless_logged "$JOB"
+    fi
+    ;;
   doctor)
     _dr_fail=0; _dr_warn=0; _dr_img=0
     _dr_p() {
@@ -435,7 +475,7 @@ case "${1:-}" in
     fi
     ;;
   *)
-    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|stop [latest|<substr>]|exec [cmd...]|doctor|status}" >&2
+    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|stop [latest|<substr>]|exec [cmd...]|task <name> [project]|doctor|status}" >&2
     echo "  <project> may be a path or alias (api|android|ios|inventrip|signing)" >&2
     exit 2
     ;;
