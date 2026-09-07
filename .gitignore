@@ -12,3 +12,6 @@ node_modules/
 
 # Headless run logs (one file per job, written by run-dsh.sh).
 runs/
+
+# Generated PDF manual (run 'make pdf' to regenerate).
+dsh-manual.pdf
