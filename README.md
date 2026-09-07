@@ -233,12 +233,32 @@ automatically.
 ```
 
 Runs one job, prints the result, and exits on its own. No manual stop
-needed; the container removes itself when done.
+needed; the container removes itself when done. Before starting, the wrapper
+runs a fail-fast preflight: it aborts if `DEEPSEEK_API_KEY` is unset in `.env`
+(a guaranteed failure for every request) and warns — but still proceeds — if
+the local oMLX server is unreachable (a network blip may be transient).
+
+### Background headless jobs
+
+```sh
+./run-dsh.sh headless --bg "run the tests"                # returns immediately
+./run-dsh.sh headless --bg "run the tests" ~/Development/myproject
+./run-dsh.sh logs latest       # follow the job live (Ctrl+C detaches, job keeps running)
+./run-dsh.sh logs <substr>     # follow (or, once finished, print) a specific job's log
+```
+
+Use `--bg` for a job you want to fire off and check on later instead of
+watching in the foreground. Unlike the synchronous path, the container is not
+auto-removed until its output has been fully captured to `runs/`, so nothing
+is lost if you check back after it has already finished — `logs` prints the
+completed log instead of trying to attach. `./run-dsh.sh runs` marks a
+still-running background job with `[running]`.
 
 ### Checking what is running
 
 ```sh
-docker compose ps       # list active containers
+./run-dsh.sh status     # containers, LiteLLM/oMLX reachability, API key, dsh-home volume usage
+docker compose ps       # list active containers only
 ```
 
 ### Cleaning up (containers, volume, image)
@@ -278,14 +298,31 @@ profile is shipped here), so resuming is a web UI action, not a CLI one.
 
 ### Run logs
 
-Every headless run is teed to a timestamped log under `runs/`, so the output
-is not lost when the ephemeral container exits. The wrapper prints the log
-path at the start and end of each run and propagates dsh's real exit code
-(POSIX `sh` has no `pipefail`, so the exit code is captured via a sidecar
-file, not the pipe).
+Every headless run (foreground or `--bg`) is teed to a timestamped log under
+`runs/`, so the output is not lost when the ephemeral container exits. The
+wrapper propagates dsh's real exit code (POSIX `sh` has no `pipefail`, so the
+exit code is captured via a sidecar file, not the pipe) and appends a run
+summary to the end of the log:
+
+```
+---- run summary ----
+task:      run the tests
+started:   2026-09-07 14:18:23
+duration:  45s
+exit code: 0
+log:       runs/20260907_141823-run_the_tests.log
+```
+
+The summary is deliberately limited to what the wrapper can observe directly
+from the outside (task text, wall-clock timing, exit code). Turn count, token
+usage, and tool-call counts are not included: they exist only inside dsh's
+own session log, which stores each event as a separate zstd-compressed frame
+(hundreds per session) in a format tied to an evolving internal RFC, not a
+stable public API — parsing it would be fragile and likely to break on a dsh
+upgrade.
 
 ```sh
-./run-dsh.sh runs                # list run logs (newest first)
+./run-dsh.sh runs                # list run logs (newest first); [running] tags live jobs
 ./run-dsh.sh runs latest         # print the most recent run log
 ./run-dsh.sh runs <substr>       # print a log whose name contains <substr>
 ```
@@ -793,7 +830,7 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless / plugin / enable-terminal / sessions / runs; starts litellm, accepts a project path, tees headless output to `runs/`).
+- `run-dsh.sh` — host wrapper (seed / web / headless [--bg] / plugin / enable-terminal / sessions / runs / logs / status; starts litellm, accepts a project path, preflight-checks the stack before headless jobs, tees headless output to `runs/` with a run summary).
 - `list-sessions.js` — in-container helper (bind-mounted read-only) that lists dsh sessions from the session-projection cache; invoked by `./run-dsh.sh sessions`.
 - `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
 - `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.
