@@ -15,3 +15,6 @@ runs/
 
 # Generated PDF manual (run 'make pdf' to regenerate).
 dsh-manual.pdf
+
+# macOS Finder metadata
+.DS_Store
