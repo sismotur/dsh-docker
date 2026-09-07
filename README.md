@@ -240,19 +240,39 @@ the local oMLX server is unreachable (a network blip may be transient).
 
 ### Background headless jobs
 
+Use `--bg` to fire off a job and check on it later instead of watching in the
+foreground. The wrapper starts the container detached, returns immediately,
+and captures the job's full output to `runs/` in the background:
+
 ```sh
-./run-dsh.sh headless --bg "run the tests"                # returns immediately
+./run-dsh.sh headless --bg "run the tests"                  # returns immediately
 ./run-dsh.sh headless --bg "run the tests" ~/Development/myproject
-./run-dsh.sh logs latest       # follow the job live (Ctrl+C detaches, job keeps running)
-./run-dsh.sh logs <substr>     # follow (or, once finished, print) a specific job's log
+./run-dsh.sh headless --bg "run the tests" android          # project alias works too
 ```
 
-Use `--bg` for a job you want to fire off and check on later instead of
-watching in the foreground. Unlike the synchronous path, the container is not
-auto-removed until its output has been fully captured to `runs/`, so nothing
-is lost if you check back after it has already finished — `logs` prints the
-completed log instead of trying to attach. `./run-dsh.sh runs` marks a
-still-running background job with `[running]`.
+The full lifecycle from one job to the next:
+
+1. **Start** — `--bg` launches the container detached and prints its id and
+   log path. Unlike the synchronous path, the container is not auto-removed
+   until its output has been fully captured to `runs/`, so nothing is lost if
+   you check back after it has already finished.
+2. **Follow live** (optional) — `./run-dsh.sh logs latest` attaches to the
+   running job with `docker logs -f`. `Ctrl+C` detaches *you* without
+   stopping the job. Once the job finishes, `logs` falls back to printing the
+   completed log from `runs/`.
+3. **Get notified** — when the job finishes, a macOS desktop notification
+   fires (title `dsh`, body `finished (exit <code>): <task-slug>`), so you
+   don't need to poll to notice completion. Requires `osascript` (present on
+   macOS by default); no-op if absent.
+4. **Check status** — `./run-dsh.sh runs` lists run logs newest-first; a
+   still-running job is tagged `[running]`. `./run-dsh.sh runs latest` (or
+   `runs <substr>`) prints a finished log.
+5. **Prune** — `./run-dsh.sh runs clean [N]` keeps the newest N logs (default
+   10) and removes the rest; a live job's log is never pruned.
+
+The container's exit code in the notification (and in the run-summary block
+   appended to each log) is read via `docker inspect` after the log stream
+   ends, before the container is removed.
 
 ### Checking what is running
 

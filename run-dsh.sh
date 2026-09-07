@@ -123,7 +123,10 @@ run_headless_logged() {
 # (tested: with --rm, a 2s job's container was already gone 3s later, losing
 # the tail of its output). It is removed explicitly once the log stream ends
 # naturally. The container id is saved to a .cid sidecar so 'runs'/'logs' can
-# tell a live job from a finished one.
+# tell a live job from a finished one. When the log stream ends (job done),
+# the container's exit code is read via 'docker inspect' (it is stopped but
+# not yet removed) and a macOS desktop notification is fired via osascript,
+# so you don't have to poll 'runs' to know the job finished.
 run_headless_bg() {
   mkdir -p runs
   _rhb_ts=$(date +%Y%m%d_%H%M%S)
@@ -134,7 +137,13 @@ run_headless_bg() {
   # shellcheck disable=SC2086
   _rhb_id=$(docker compose run -d $MNT dsh-headless --profile headless "$@")
   printf '%s' "$_rhb_id" > "$_rhb_cid"
-  ( docker logs -f "$_rhb_id" > "$_rhb_log" 2>&1 < /dev/null; docker rm "$_rhb_id" >/dev/null 2>&1 ) &
+  (
+    docker logs -f "$_rhb_id" > "$_rhb_log" 2>&1 < /dev/null
+    _rhb_rc=$(docker inspect --format '{{.State.ExitCode}}' "$_rhb_id" 2>/dev/null || echo '?')
+    docker rm "$_rhb_id" >/dev/null 2>&1
+    command -v osascript >/dev/null 2>&1 && \
+      osascript -e "display notification \"finished (exit $_rhb_rc): $_rhb_slug\" with title \"dsh\""
+  ) &
   echo "[dsh] started in background: $(printf '%s' "$_rhb_id" | cut -c1-12)"
   echo "[dsh] log: $_rhb_log"
   echo "[dsh] follow with: $0 logs latest"
