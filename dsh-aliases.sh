@@ -68,6 +68,35 @@ find_files_regex() {
 }
 
 #############################
+# PROMPT — show the real project name, not /workspace
+#############################
+
+# The dsh-better-sidebar terminal spawns `bash -l` in /workspace, which is a
+# bind-mount of the real project folder. run-dsh.sh exports WORKSPACE_NAME
+# (the host folder's basename) so the prompt can show the actual project name
+# instead of the generic "workspace" mount point.
+__dsh_prompt() {
+  local exit_code=$?
+  local dir
+  if [ "$PWD" = /workspace ]; then
+    dir="${WORKSPACE_NAME:-workspace}"
+  elif [ "${PWD#/workspace/}" != "$PWD" ]; then
+    dir="${WORKSPACE_NAME:-workspace}/${PWD#/workspace/}"
+  else
+    dir="${PWD/#$HOME/~}"
+  fi
+  local branch
+  branch=$(git --no-pager symbolic-ref --short HEAD 2>/dev/null)
+  local git_part=""
+  if [ -n "$branch" ]; then
+    git_part=" \[\e[33m\]($branch)\[\e[0m\]"
+  fi
+  PS1="\[\e[36m\]$dir\[\e[0m\]$git_part\$ "
+  return $exit_code
+}
+PROMPT_COMMAND=__dsh_prompt
+
+#############################
 # SHELL SAFETY NETS — -i confirms before clobbering
 #############################
 
