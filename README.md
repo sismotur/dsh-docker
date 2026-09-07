@@ -442,7 +442,8 @@ with the full background lifecycle (notification, `logs`, `runs`, `stop`).
 Drop a `.md` file in `templates/` — the first line should be a `# Title`
 (surfaced by `./run-dsh.sh task` as the description). The rest is the prompt
 dsh receives as its job text. No rebuild needed; templates are read from
-the host at run time.
+the host at run time, so edits, additions, and removals take effect on the
+next invocation — there is no cache or daemon to reload.
 
 ## Working on existing projects
 
