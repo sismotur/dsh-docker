@@ -13,6 +13,7 @@
 #   ./run-dsh.sh sessions               # list recent dsh sessions (id, turns, title)
 #   ./run-dsh.sh runs [latest|<substr>|clean [N]]  # list, cat, or prune run logs (default keep 10)
 #   ./run-dsh.sh logs [latest|<substr>] # follow a live background job, or cat it once finished
+#   ./run-dsh.sh stop [latest|<substr>] # cancel a live background job (docker rm -f)
 #   ./run-dsh.sh status                 # stack status: containers, litellm, oMLX, volume usage
 set -e
 cd "$(dirname "$0")"
@@ -281,6 +282,29 @@ case "${1:-}" in
       exit 1
     fi
     ;;
+  stop)
+    mkdir -p runs
+    ARG="${2:-latest}"
+    if [ "$ARG" = "latest" ]; then
+      CIDF=$(ls -1t runs/*.cid 2>/dev/null | head -1)
+    else
+      case "$ARG" in */*) echo "Invalid job name." >&2; exit 2 ;; esac
+      CIDF=$(ls -1 runs/*"$ARG"*.cid 2>/dev/null | head -1)
+    fi
+    if [ -z "$CIDF" ] || [ ! -f "$CIDF" ]; then
+      echo "No background job found." >&2
+      exit 1
+    fi
+    CID=$(cat "$CIDF")
+    if ! docker inspect "$CID" >/dev/null 2>&1; then
+      echo "Job already finished; removing stale sidecar." >&2
+      rm -f "$CIDF"
+      exit 0
+    fi
+    docker rm -f "$CID" >/dev/null 2>&1
+    rm -f "$CIDF"
+    echo "[dsh] stopped: $(printf '%s' "$CID" | cut -c1-12)"
+    ;;
   status)
     echo "Containers:"
     docker compose ps
@@ -310,7 +334,7 @@ case "${1:-}" in
     docker compose run --rm --no-deps --entrypoint sh dsh-headless -c 'du -sh /data 2>/dev/null' 2>/dev/null || echo "unknown"
     ;;
   *)
-    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|status}" >&2
+    echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|stop [latest|<substr>]|status}" >&2
     echo "  <project> may be a path or alias (api|android|ios|inventrip|signing)" >&2
     exit 2
     ;;

@@ -276,6 +276,18 @@ The container's exit code in the notification (and in the run-summary block
    appended to each log) is read via `docker inspect` after the log stream
    ends, before the container is removed.
 
+### Cancelling a background job
+
+```sh
+./run-dsh.sh stop              # stop the most recent background job
+./run-dsh.sh stop <substr>     # stop a job whose log name contains <substr>
+```
+
+Force-kills the container (`docker rm -f`) and removes its `.cid` sidecar so
+`runs` and `logs` no longer treat it as live. If the job already finished,
+the stale sidecar is cleaned up instead. The log file in `runs/` is kept —
+`stop` only kills the container, it does not delete the captured output.
+
 ### Checking what is running
 
 ```sh
