@@ -9,3 +9,6 @@ workspace/*
 # Only package.json + package-lock.json are committed; installs run inside the
 # Docker builder, never on the host.
 node_modules/
+
+# Headless run logs (one file per job, written by run-dsh.sh).
+runs/

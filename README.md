@@ -258,6 +258,41 @@ The agent can only read/write `/workspace` (bind-mounted to
 Put files you want it to touch in the workspace first, or pass a project path
 (see below).
 
+### Session history
+
+List past dsh sessions (id, turn count, last-activity timestamp, title):
+
+```sh
+./run-dsh.sh sessions
+```
+
+Sessions persist on the `dsh-home` volume (`/data`), so they survive
+`docker compose down` and are wiped only by `down -v`. The list reads the
+session-projection cache inside the container via a read-only bind-mount of
+`list-sessions.js` — no image rebuild needed.
+
+To reopen a session, start the web UI (`./run-dsh.sh web`) and pick it from
+the sidebar's session list. dsh exposes no CLI resume flag for the web or
+headless profiles (its `--resume` is a `tui`-profile flag, and no `tui`
+profile is shipped here), so resuming is a web UI action, not a CLI one.
+
+### Run logs
+
+Every headless run is teed to a timestamped log under `runs/`, so the output
+is not lost when the ephemeral container exits. The wrapper prints the log
+path at the start and end of each run and propagates dsh's real exit code
+(POSIX `sh` has no `pipefail`, so the exit code is captured via a sidecar
+file, not the pipe).
+
+```sh
+./run-dsh.sh runs                # list run logs (newest first)
+./run-dsh.sh runs latest         # print the most recent run log
+./run-dsh.sh runs <substr>       # print a log whose name contains <substr>
+```
+
+`runs/` is gitignored. Web (interactive) runs are not logged — only headless
+(unattended) runs, which is where lost output matters.
+
 ## Working on existing projects
 
 To work on an existing repo, pass its path as an extra argument. The wrapper
@@ -758,7 +793,8 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `register-workspace.sh` — pre-registers `/workspace` in the dsh workspace registry on boot.
 - `patches/{web,headless}/cordis.patch.yml` — LiteLLM router + MCP server patches.
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
-- `run-dsh.sh` — host wrapper (seed / web / headless / plugin / enable-terminal; starts litellm, accepts a project path).
+- `run-dsh.sh` — host wrapper (seed / web / headless / plugin / enable-terminal / sessions / runs; starts litellm, accepts a project path, tees headless output to `runs/`).
+- `list-sessions.js` — in-container helper (bind-mounted read-only) that lists dsh sessions from the session-projection cache; invoked by `./run-dsh.sh sessions`.
 - `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
 - `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.
 - `hardening-checks.sh` — in-container invariant checks (uid, caps, no-new-privs, read-only rootfs, /tmp noexec, no setuid, no build tools, gitconfig, ignore-scripts, node-pty prebuild, env-scrub pattern, default preset); invoked by `test-hardening.sh`.
