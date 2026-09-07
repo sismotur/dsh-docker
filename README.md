@@ -682,10 +682,11 @@ and `/data`.
 ## Security invariants
 
 The testable properties the hardened image guarantees. Each is phrased as an
-invariant that must hold after every build; a planned `test-hardening.sh`
-(deferred) will assert them automatically. They are verified today by the
-smoke commands in [Deployment §5](#5-verify-the-deployment) and the
-[Security audit](#security-audit) above.
+invariant that must hold after every build. The `./test-hardening.sh` suite
+asserts all of them automatically (host static checks + in-container checks
+under the real runtime security context); run it after any hardening change.
+They are also verified by the smoke commands in [Deployment §5](#5-verify-the-deployment)
+and the [Security audit](#security-audit) above.
 
 **Runtime (docker-compose.yml)**
 
@@ -728,6 +729,24 @@ smoke commands in [Deployment §5](#5-verify-the-deployment) and the
 19. `node-pty` is compiled from a verified tarball in the builder; only the
     81 KB `pty.node` binary crosses into the read-only runtime.
 
+## Validating hardening
+
+Run the hardening validation suite after any `Dockerfile`, `docker-compose.yml`,
+or lockfile change to confirm every security invariant still holds:
+
+```sh
+./test-hardening.sh             # build, then run all checks
+./test-hardening.sh --no-build  # test the current image without rebuilding
+```
+
+Phase A checks the host config statically (compose runtime controls, Dockerfile
+build controls, lockfile integrity via `jq`). Phase B builds the image. Phase C
+bind-mounts `hardening-checks.sh` into a container and runs it under the real
+runtime security context (cap_drop ALL, no-new-privileges, read-only rootfs,
+/tmp noexec tmpfs) to assert the in-container invariants. The suite exits
+non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
+`docker compose`, and `jq` on the host.
+
 ## Files
 
 - `Dockerfile` — multi-stage build (dsh + pnpm + socat + dev tools + MCP memory server, build tools excluded).
@@ -741,4 +760,6 @@ smoke commands in [Deployment §5](#5-verify-the-deployment) and the
 - `seed-omlx.sh` — seeds patches and the pnpm store into the `DSH_HOME` volume.
 - `run-dsh.sh` — host wrapper (seed / web / headless / plugin / enable-terminal; starts litellm, accepts a project path).
 - `enable-terminal.sh` — injects the prebuilt node-pty binary into the dsh-better-sidebar plugin so the terminal tab works.
+- `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.
+- `hardening-checks.sh` — in-container invariant checks (uid, caps, no-new-privs, read-only rootfs, /tmp noexec, no setuid, no build tools, gitconfig, ignore-scripts, node-pty prebuild, env-scrub pattern, default preset); invoked by `test-hardening.sh`.
 - `.env.example` — API key and git identity template.
