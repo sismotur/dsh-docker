@@ -923,7 +923,7 @@ The testable properties the hardened image guarantees. Each is phrased as an
 invariant that must hold after every build. The `./test-hardening.sh` suite
 asserts all of them automatically (host static checks + in-container checks
 under the real runtime security context); run it after any hardening change.
-They are also verified by the smoke commands in [Deployment §5](#5-verify-the-deployment)
+They are also verified by the smoke commands in [Deployment §5](#deployment)
 and the [Security audit](#security-audit) above.
 
 **Runtime (docker-compose.yml)**
