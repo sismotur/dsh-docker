@@ -222,8 +222,10 @@ dsh has no background daemon. Each invocation is an ephemeral container
 Runs in the foreground. dsh 0.1.2+ prints a **tokenized URL** at startup
 (`http://127.0.0.1:8080/?token=...`) — open that exact URL in your browser;
 the bare URL without the token returns 401. The token sets an auth cookie
-valid for 30 days. Stop the container with `Ctrl+C`; it exits and is removed
-automatically.
+valid for 30 days. The wrapper copies this URL to the macOS clipboard
+automatically (`pbcopy`), so you can paste it straight into a browser instead
+of hunting through the startup scrollback. Stop the container with `Ctrl+C`;
+it exits and is removed automatically.
 
 ### Headless profile (one-shot)
 

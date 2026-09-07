@@ -155,8 +155,28 @@ case "${1:-}" in
     MNT=$(mount_project "$(resolve_project "${2:-}")")
     # The web entrypoint runs dsh on 127.0.0.1 (safety) and socat-proxies
     # 0.0.0.0:8080 so Docker can publish the port. --service-ports publishes.
+    # dsh prints a one-time tokenized URL at startup; tee the output to a temp
+    # file and background a watcher that copies the clean URL (ANSI stripped) to
+    # the macOS clipboard via pbcopy so it can be pasted straight into a browser
+    # instead of hunting through scrollback. No-op if pbcopy is absent.
+    _web_log=$(mktemp)
+    _web_esc=$(printf '\033')
+    ( until sed "s/$_web_esc\[[0-9;]*m//g" "$_web_log" 2>/dev/null | \
+           grep -q 'http://127\.0\.0\.1:8080/?token='; do
+        sleep 0.5
+      done
+      if command -v pbcopy >/dev/null 2>&1; then
+        _web_url=$(sed "s/$_web_esc\[[0-9;]*m//g" "$_web_log" | \
+          grep -o 'http://127\.0\.0\.1:8080/?token=[^ ]*' | head -1)
+        printf '%s' "$_web_url" | pbcopy
+        echo '[dsh] token URL copied to clipboard' >&2
+      fi
+    ) &
+    _web_watcher=$!
     # shellcheck disable=SC2086
-    docker compose run --rm --service-ports $MNT dsh-web
+    ( set +e; docker compose run --rm --service-ports $MNT dsh-web 2>&1 | tee "$_web_log" ) || true
+    kill "$_web_watcher" 2>/dev/null || true
+    rm -f "$_web_log"
     ;;
   headless)
     ensure_router
