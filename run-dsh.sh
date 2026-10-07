@@ -66,8 +66,8 @@ slugify() {
 }
 
 # Fail-fast checks before an unattended headless job: a missing API key is a
-# deterministic failure for every request, so it aborts; an unreachable oMLX
-# server only warns (transient network hiccups happen, and dsh may retry).
+# deterministic failure for every request, so it aborts. Primary backend is
+# TensorFold (:8421, models under ~/models/tensorfold). oMLX (:8000) is optional.
 # Catches a broken stack in ~1s instead of after the container starts and the
 # job fails deep in a request chain.
 preflight_headless() {
@@ -76,8 +76,12 @@ preflight_headless() {
     echo "[preflight] DEEPSEEK_API_KEY not set in .env (copy .env.example and edit it)." >&2
     _pf_ok=0
   fi
+  if ! curl -fsS -m 3 http://127.0.0.1:8421/v1/models >/dev/null 2>&1; then
+    echo "[preflight] warning: TensorFold not reachable at 127.0.0.1:8421 (service omlx-qwen36 / ~/models/tensorfold)." >&2
+    _pf_ok=0
+  fi
   if ! curl -fsS -m 3 http://127.0.0.1:8000/v1/models >/dev/null 2>&1; then
-    echo "[preflight] warning: local oMLX server not reachable at 127.0.0.1:8000 -- the job will likely fail." >&2
+    echo "[preflight] note: oMLX at 127.0.0.1:8000 down (optional; VL/non-TF models unavailable)." >&2
   fi
   [ "$_pf_ok" = 1 ] || { echo "[preflight] aborting." >&2; return 1; }
   return 0
@@ -318,14 +322,32 @@ case "${1:-}" in
     else
       echo "NOT reachable -- start with: docker compose up -d litellm"
     fi
+    printf 'TensorFold fast (127.0.0.1:8421): '
+    if TF_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8421/v1/models 2>/dev/null); then
+      echo "reachable  (models root: $HOME/models/tensorfold)"
+      if command -v jq >/dev/null 2>&1; then
+        printf '%s' "$TF_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
+      fi
+    else
+      echo "NOT reachable -- tensorfold service start omlx-qwen36"
+    fi
+    printf 'TensorFold Qwen3.8 (:8423):      '
+    if TF38_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8423/v1/models 2>/dev/null); then
+      echo "reachable  (tf-qwen38 + DFlash2)"
+      if command -v jq >/dev/null 2>&1; then
+        printf '%s' "$TF38_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
+      fi
+    else
+      echo "down -- tensorfold service start tf-qwen38"
+    fi
     printf 'oMLX server (127.0.0.1:8000):     '
     if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
-      echo "reachable"
+      echo "reachable (optional)"
       if command -v jq >/dev/null 2>&1; then
         printf '%s' "$OMLX_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
       fi
     else
-      echo "NOT reachable -- start the local oMLX server"
+      echo "down (optional)"
     fi
     printf 'DEEPSEEK_API_KEY:                 '
     if [ -f .env ] && grep -qE '^DEEPSEEK_API_KEY=.+' .env && ! grep -q '^DEEPSEEK_API_KEY=changeme$' .env; then
@@ -447,21 +469,31 @@ case "${1:-}" in
       _dr_p WARN 'litellm reachable' 'run: docker compose up -d litellm'
       _dr_warn=$((_dr_warn + 1))
     fi
-    if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
-      _dr_p OK 'oMLX reachable'
+    if TF_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8421/v1/models 2>/dev/null); then
+      _dr_p OK 'TensorFold reachable'
       if command -v jq >/dev/null 2>&1; then
-        _dr_n=$(printf '%s' "$OMLX_MODELS" | jq -r '.data[]?.id' 2>/dev/null | grep -c . || true)
+        _dr_n=$(printf '%s' "$TF_MODELS" | jq -r '.data[]?.id' 2>/dev/null | grep -c . || true)
         if [ "$_dr_n" -gt 0 ] 2>/dev/null; then
-          _dr_p OK 'oMLX models' "$_dr_n available"
+          _dr_p OK 'TensorFold models' "$_dr_n available ($HOME/models/tensorfold)"
         else
-          _dr_p WARN 'oMLX models' 'none listed'
+          _dr_p WARN 'TensorFold models' 'none listed'
           _dr_warn=$((_dr_warn + 1))
         fi
       else
-        _dr_p OK 'oMLX models' '(jq not installed to count)'
+        _dr_p OK 'TensorFold models' "root $HOME/models/tensorfold"
       fi
     else
-      _dr_p WARN 'oMLX reachable' 'start the local oMLX server'
+      _dr_p FAIL 'TensorFold reachable' 'tensorfold service start omlx-qwen36'
+      _dr_fail=$((_dr_fail + 1))
+    fi
+    if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
+      _dr_p OK 'oMLX reachable (optional)'
+      if command -v jq >/dev/null 2>&1; then
+        _dr_n=$(printf '%s' "$OMLX_MODELS" | jq -r '.data[]?.id' 2>/dev/null | grep -c . || true)
+        _dr_p OK 'oMLX models' "$_dr_n available"
+      fi
+    else
+      _dr_p WARN 'oMLX reachable' 'optional; VL/non-TF models need oMLX :8000'
       _dr_warn=$((_dr_warn + 1))
     fi
     echo

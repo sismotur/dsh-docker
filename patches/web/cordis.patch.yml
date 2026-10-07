@@ -2,11 +2,10 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# LiteLLM router integration: dsh points at the LiteLLM proxy (compose service
-# 'litellm' on port 4000) which auto-routes requests to oMLX models by
-# complexity. The API key is read from DEEPSEEK_API_KEY (apiKeyEnv below).
-# smart-router is the default; individual models are also advertised for manual
-# per-session selection in the dsh UI.
+# LiteLLM router: dsh -> litellm:4000 -> TensorFold (:8421 fast, :8423 Qwen3.8),
+# oMLX (host :8000) optional for VL / non-TF checkpoints.
+# Models root on host: ~/models/tensorfold
+# API key: DEEPSEEK_API_KEY (apiKeyEnv). TensorFold ignores it; oMLX may not.
 - id: llm-deepseek
   config:
     baseURL: http://litellm:4000/v1
@@ -14,20 +13,32 @@
     reasoningEffort: high
     models:
       - id: smart-router
-        name: smart-router (auto-routing)
-        contextWindow: 262144
-      - id: Qwen3-VL-30B-A3B-Instruct-4bit
-        name: Qwen3-VL-30B-A3B (vision + tools)
-        contextWindow: 262144
-      - id: Qwen3.8-27B-OptiQ-4bit
-        name: Qwen3.8-27B-OptiQ
-        contextWindow: 262144
+        name: smart-router (auto → TensorFold fast)
+        contextWindow: 131072
+      - id: omlx-qwen36
+        name: TensorFold Qwen3.6-35B-A3B-4bit (fast)
+        contextWindow: 131072
       - id: Qwen3.6-35B-A3B-4bit
-        name: Qwen3.6-35B-A3B (fast + thinking)
-        contextWindow: 262144
+        name: Qwen3.6-35B-A3B (TensorFold alias)
+        contextWindow: 131072
+      - id: qwen36-35b-4bit
+        name: qwen36-35b-4bit (TensorFold alias)
+        contextWindow: 131072
+      - id: tf-qwen38
+        name: TensorFold Qwen3.8-27B + DFlash2 (quality)
+        contextWindow: 32768
+      - id: Qwen3.8-27B-OptiQ-4bit
+        name: Qwen3.8-27B-OptiQ (TensorFold + DFlash2)
+        contextWindow: 32768
+      - id: qwen38-27b-optiq-4bit
+        name: qwen38-27b-optiq-4bit (TensorFold alias)
+        contextWindow: 32768
       - id: DeepSeek-V4-Flash-0731-2.4bit-mixed
-        name: DeepSeek-V4-Flash (max quality, 1M ctx)
+        name: DeepSeek-V4-Flash (oMLX, if up)
         contextWindow: 1048576
+      - id: Qwen3-VL-30B-A3B-Instruct-4bit
+        name: Qwen3-VL-30B-A3B (oMLX vision, if up)
+        contextWindow: 262144
 - id: agent-default-model
   config:
     provider: deepseek-official

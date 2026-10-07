@@ -49,8 +49,8 @@ x-dsh-base: &dsh-base
     - IS_SANDBOXED=1
 
 services:
-  # LiteLLM proxy: auto-routes dsh requests to oMLX models by complexity.
-  # Long-running service started with 'docker compose up -d litellm'.
+  # LiteLLM proxy: routes dsh -> TensorFold (:8421, ~/models/tensorfold) primary,
+  # optional oMLX (:8000). Started with 'docker compose up -d litellm'.
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     command: ["--config", "/config.yaml", "--port", "4000"]
@@ -58,8 +58,10 @@ services:
       - "127.0.0.1:4000:4000"
     volumes:
       - ./litellm-config.yaml:/config.yaml:ro
+      - ./litellm_hooks.py:/app/litellm_hooks.py:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - PYTHONPATH=/app
     restart: unless-stopped
     logging:
       driver: json-file

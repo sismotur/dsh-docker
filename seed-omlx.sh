@@ -1,5 +1,7 @@
 #!/bin/sh
-# Seed the oMLX cordis.patch.yml into the DSH_HOME volume for both profiles.
+# Seed cordis patches into the DSH_HOME volume for both profiles.
+# Backend path: dsh -> LiteLLM -> TensorFold (host :8421, models in
+# ~/models/tensorfold) with optional oMLX (:8000) for non-TF models.
 # Run via: ./run-dsh.sh seed   (or: docker compose run --rm --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless)
 set -e
 : "${DSH_HOME:=/data}"
@@ -17,9 +19,8 @@ echo "seeded $DSH_HOME/AGENTS.md"
 # pnpm store on the writable volume (rootfs is read-only at runtime).
 mkdir -p "${PNPM_HOME:-$DSH_HOME/.pnpm}"
 
-# Set the default model to smart-router (the LiteLLM auto router). A saved
-# selection in settings.yaml overrides the cordis patch's agent-default-model,
-# so reset it here to avoid a stale model name after switching to the router.
+# Default model: smart-router -> TensorFold omlx-qwen36. A saved selection in
+# settings.yaml overrides cordis agent-default-model, so reset it on seed.
 cat > "$DSH_HOME/settings.yaml" << 'EOF'
 ui-onboarding:
   welcomeNoticeVersion: 2026-08-13.1
@@ -28,4 +29,4 @@ agent-default-model:
   model: smart-router
   reasoningEffort: high
 EOF
-echo "oMLX patches + pnpm store + default model ready."
+echo "TensorFold/oMLX patches + pnpm store + default model ready."

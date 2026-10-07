@@ -1,25 +1,79 @@
-# LiteLLM proxy config: routes dsh requests to oMLX models with auto-routing.
-# dsh points at http://litellm:4000/v1; LiteLLM classifies each request by
-# complexity and routes to the appropriate tier's model on oMLX.
+# LiteLLM proxy config: routes dsh requests to local backends.
+# dsh -> http://litellm:4000/v1
+#
+# Primary backend: TensorFold on the host (OpenAI-compatible).
+#   models root: ~/models/tensorfold  (symlinks into ~/.omlx/models)
+#   fast:    omlx-qwen36 @ :8421 (--context 131072)
+#   quality: tf-qwen38   @ :8423 (Qwen3.8-27B + DFlash2, --context 32768)
+# Optional: oMLX on :8000 for checkpoints TensorFold cannot serve (e.g. VL).
 
 model_list:
-  # --- Individual models (for manual selection via dsh UI) ---
-  - model_name: Qwen3.8-27B-OptiQ-4bit
+  # --- TensorFold (primary) ---
+  # Live service model id is always `omlx-qwen36` while that LaunchAgent runs.
+  # Extra model_name aliases keep the dsh UI / old selections working.
+  - model_name: omlx-qwen36
     litellm_params:
-      model: openai/Qwen3.8-27B-OptiQ-4bit
-      api_base: http://host.docker.internal:8000/v1
+      model: openai/omlx-qwen36
+      api_base: http://host.docker.internal:8421/v1
       api_key: os.environ/DEEPSEEK_API_KEY
-      # Drop unsupported params (e.g. dsh 'thinking' from reasoningEffort)
-      # before forwarding to oMLX. Per-model, NOT in litellm_settings, so the
-      # smart-router keeps 'tools' for routing (global drop_params strips tools).
       drop_params: true
+      # Qwen thinking off by default for agent tool loops (faster, cleaner).
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
 
   - model_name: Qwen3.6-35B-A3B-4bit
     litellm_params:
-      model: openai/Qwen3.6-35B-A3B-4bit
-      api_base: http://host.docker.internal:8000/v1
+      model: openai/omlx-qwen36
+      api_base: http://host.docker.internal:8421/v1
       api_key: os.environ/DEEPSEEK_API_KEY
       drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  - model_name: qwen36-35b-4bit
+    litellm_params:
+      model: openai/omlx-qwen36
+      api_base: http://host.docker.internal:8421/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  # --- TensorFold Qwen3.8 dense + DFlash2 (quality, ~30 tok/s) ---
+  - model_name: tf-qwen38
+    litellm_params:
+      model: openai/tf-qwen38
+      api_base: http://host.docker.internal:8423/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  - model_name: Qwen3.8-27B-OptiQ-4bit
+    litellm_params:
+      model: openai/tf-qwen38
+      api_base: http://host.docker.internal:8423/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  - model_name: qwen38-27b-optiq-4bit
+    litellm_params:
+      model: openai/tf-qwen38
+      api_base: http://host.docker.internal:8423/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  # --- oMLX optional (host :8000) — only if oMLX is running ---
 
   - model_name: DeepSeek-V4-Flash-0731-2.4bit-mixed
     litellm_params:
@@ -36,35 +90,44 @@ model_list:
       drop_params: true
 
   # --- Auto router (default) ---
-  # Classifies each request by complexity (heuristic scorer, sub-ms) and
-  # routes to the tier's model. Context-window escalation is on by default:
-  # if a prompt provably won't fit the chosen model, it escalates to a bigger one.
+  # Prefer TensorFold Qwen for all tiers while TF is the active coding backend.
+  # VL stays selectable manually when oMLX is up.
   - model_name: smart-router
     litellm_params:
       model: auto_router/complexity_router
       complexity_router_config:
         tiers:
-          SIMPLE: Qwen3-VL-30B-A3B-Instruct-4bit
-          MEDIUM: Qwen3-VL-30B-A3B-Instruct-4bit
-          COMPLEX: Qwen3.8-27B-OptiQ-4bit
-          REASONING: Qwen3.6-35B-A3B-4bit
-        # Classify only new user asks, carry the decision through tool-result
-        # and follow-up turns (fewer classifier calls in agentic sessions).
+          SIMPLE: omlx-qwen36
+          MEDIUM: omlx-qwen36
+          COMPLEX: omlx-qwen36
+          REASONING: omlx-qwen36
         classification_mode: user_turn
-      complexity_router_default_model: Qwen3-VL-30B-A3B-Instruct-4bit
+      complexity_router_default_model: omlx-qwen36
 
 litellm_settings:
   num_retries: 2
-  request_timeout: 120
-  # Fallback chain: if a model fails, try the next.
+  request_timeout: 300
+  # Clamp dsh max_tokens (often 256k) before TensorFold sees the request.
+  callbacks:
+    - litellm_hooks.proxy_handler_instance
   fallbacks:
     - smart-router:
-        - Qwen3-VL-30B-A3B-Instruct-4bit
-    - Qwen3-VL-30B-A3B-Instruct-4bit:
-        - Qwen3.8-27B-OptiQ-4bit
-    - Qwen3.8-27B-OptiQ-4bit:
-        - Qwen3-VL-30B-A3B-Instruct-4bit
+        - omlx-qwen36
+        - Qwen3.6-35B-A3B-4bit
+    - omlx-qwen36:
+        - Qwen3.6-35B-A3B-4bit
     - Qwen3.6-35B-A3B-4bit:
+        - omlx-qwen36
+    - tf-qwen38:
         - Qwen3.8-27B-OptiQ-4bit
+        - omlx-qwen36
+    - Qwen3.8-27B-OptiQ-4bit:
+        - tf-qwen38
+        - omlx-qwen36
+    - qwen38-27b-optiq-4bit:
+        - tf-qwen38
+        - omlx-qwen36
     - DeepSeek-V4-Flash-0731-2.4bit-mixed:
-        - Qwen3.8-27B-OptiQ-4bit
+        - omlx-qwen36
+    - Qwen3-VL-30B-A3B-Instruct-4bit:
+        - omlx-qwen36
