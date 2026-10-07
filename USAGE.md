@@ -193,6 +193,7 @@ docker compose build
 | Old dsh behavior after upgrade | `docker compose build` (image must match lockfile) |
 | Agent ignores private rules | Ensure `agents/private/` exists, then `./run-dsh.sh seed` |
 | Native addon / “failed to map segment” | Compose must set `NARB_DISABLE_NATIVE_CACHE=1` (already default here) |
+| `web_search_preview` / tools error | LiteLLM hook strips built-in OpenAI tools; recreate litellm: `docker compose up -d --force-recreate litellm` |
 
 ## More detail
 
