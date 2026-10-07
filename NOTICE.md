@@ -55,5 +55,4 @@ text above) with any such distribution.
   npm for each package version pinned in the lockfiles.
 
 This project's **original** files (Docker/Compose, scripts, patches, agent
-packs, docs) are licensed under the MIT License in `LICENSE` (copyright
-Felipe Santi), unless a file says otherwise.
+packs, docs) are licensed under the MIT License in `LICENSE` (copyright Sismotur), unless a file says otherwise.

@@ -1023,7 +1023,7 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 ## License and attribution
 
 - **This repository's original code** (Docker/Compose, host scripts, cordis
-  patches, agent packs, docs, tests): [MIT](LICENSE) © Felipe Santi.
+  patches, agent packs, docs, tests): [MIT](LICENSE) © Sismotur.
 - **DeepSeek Harness / `@deepseek-ai/dsh`** (pulled at image build): MIT ©
   DeepSeek — full notice in [NOTICE.md](NOTICE.md).
 - Upstream project:
