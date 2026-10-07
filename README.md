@@ -3,6 +3,15 @@
 Runs the DeepSeek harness CLI (`@deepseek-ai/dsh`) inside a locked-down
 container instead of bare-metal on the host.
 
+
+> **Relationship to DeepSeek Harness.** This repo packages and hardens
+> [`@deepseek-ai/dsh`](https://www.npmjs.com/package/@deepseek-ai/dsh) in Docker.
+> It is **not** an official DeepSeek product and **not** a git fork of
+> [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness).
+> Upstream is MIT-licensed; see `LICENSE` (this project) and `NOTICE.md`
+> (third-party attribution).
+
+
 ## Table of contents
 
 - [Why](#why)
@@ -33,6 +42,7 @@ container instead of bare-metal on the host.
 - [Security audit](#security-audit)
 - [Security invariants](#security-invariants)
 - [Validating hardening](#validating-hardening)
+- [License and attribution](#license-and-attribution)
 - [Files](#files)
 
 ## Why
@@ -1008,3 +1018,17 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `test-hardening.sh` — host-side hardening validation suite driver (Phase A host static checks, Phase B build, Phase C in-container checks); exits non-zero on any invariant violation.
 - `hardening-checks.sh` — in-container invariant checks (uid, caps, no-new-privs, read-only rootfs, /tmp noexec, no setuid, no build tools, gitconfig, ignore-scripts, node-pty prebuild, env-scrub pattern, default preset); invoked by `test-hardening.sh`.
 - `.env.example` — API key and git identity template.
+
+
+## License and attribution
+
+- **This repository's original code** (Docker/Compose, host scripts, cordis
+  patches, agent packs, docs, tests): [MIT](LICENSE) © Felipe Santi.
+- **DeepSeek Harness / `@deepseek-ai/dsh`** (pulled at image build): MIT ©
+  DeepSeek — full notice in [NOTICE.md](NOTICE.md).
+- Upstream project:
+  [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness).
+
+If you publish container images built from this tree, retain `NOTICE.md` with
+the distribution so DeepSeek's MIT copyright notice travels with substantial
+portions of their software embedded in the image.

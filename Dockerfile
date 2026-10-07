@@ -62,6 +62,7 @@ COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml
 COPY agents/public/               /opt/dsh-patches/agents/public/
 COPY agents/private.example/      /opt/dsh-patches/agents/private.example/
+COPY LICENSE NOTICE.md                 /opt/dsh-patches/
 COPY seed-omlx.sh /usr/local/bin/seed-omlx.sh
 COPY register-workspace.sh /usr/local/bin/register-workspace.sh
 COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
