@@ -15,7 +15,11 @@ x-dsh-base: &dsh-base
     - /tmp:noexec,nosuid,size=64m
   volumes:
     - dsh-home:/data
-    - ./workspace:/workspace
+    # /workspace is always supplied by run-dsh.sh mount_project (project path or
+    # ./workspace) together with WORKSPACE_NAME=<folder-basename> so the UI/
+    # terminal show inventrip_api (etc.), not the generic label "workspace".
+    # Local plugins (file: deps + cordis inserts); host edits apply without rebuild.
+    - ./plugins:/opt/dsh-plugins:ro
   pids_limit: 512
   mem_limit: 4g
   cpus: "4"
@@ -90,7 +94,8 @@ services:
 
   dsh-web:
     <<: *dsh-base
-    entrypoint: ["/usr/local/bin/web-entrypoint.sh"]
+    # sh wrapper: host bind-mount of entrypoint may lack +x
+    entrypoint: ["sh", "/usr/local/bin/web-entrypoint.sh"]
     ports:
       - "127.0.0.1:8080:8080"
 

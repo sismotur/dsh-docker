@@ -29,8 +29,14 @@ SCRIPT_DIR="$PWD"
 # Returns the -v/-e flag string (or empty).
 mount_project() {
   p="$1"
+  # Always bind a host dir at /workspace and set WORKSPACE_NAME to the real
+  # folder basename (inventrip_api, not the generic mount point "workspace").
+  # Empty arg → repo-local ./workspace placeholder (still named explicitly).
   if [ -z "$p" ]; then
-    echo ""
+    abs="$SCRIPT_DIR/workspace"
+    mkdir -p "$abs"
+    name=$(basename "$abs")
+    echo "-v $abs:/workspace -e WORKSPACE_NAME=$name"
     return
   fi
   if ! [ -d "$p" ]; then
@@ -39,7 +45,29 @@ mount_project() {
   fi
   abs=$(cd "$p" && pwd)
   name=$(basename "$abs")
+  # Quote-free echo: names are basenames (no spaces). Path may have spaces —
+  # use separate docker -v form via printf %q if needed later.
   echo "-v $abs:/workspace -e WORKSPACE_NAME=$name"
+}
+
+# Host scripts/plugins bind-mounted so web/headless pick up fixes without rebuild.
+# Prints space-separated docker flags with NO leading/trailing space.
+host_runtime_mounts() {
+  set --
+  if [ -f "$SCRIPT_DIR/web-entrypoint.sh" ]; then
+    set -- "$@" -v "$SCRIPT_DIR/web-entrypoint.sh:/usr/local/bin/web-entrypoint.sh:ro"
+  fi
+  if [ -f "$SCRIPT_DIR/register-workspace.sh" ]; then
+    set -- "$@" -v "$SCRIPT_DIR/register-workspace.sh:/usr/local/bin/register-workspace.sh:ro"
+  fi
+  if [ -f "$SCRIPT_DIR/dsh-aliases.sh" ]; then
+    set -- "$@" -v "$SCRIPT_DIR/dsh-aliases.sh:/etc/profile.d/dsh-aliases.sh:ro"
+  fi
+  if [ -d "$SCRIPT_DIR/plugins" ]; then
+    set -- "$@" -v "$SCRIPT_DIR/plugins:/opt/dsh-plugins:ro"
+  fi
+  # shellcheck disable=SC2086,SC2145
+  printf '%s' "$*"
 }
 
 # Expand a short project alias (projects.local.sh) or pass a path through.
@@ -165,6 +193,14 @@ case "${1:-}" in
   web)
     ensure_router
     MNT=$(mount_project "$(resolve_project "${2:-}")")
+    HRM=$(host_runtime_mounts)
+    if [ -z "${2:-}" ]; then
+      echo "[dsh] tip: pass a project so the UI shows its name/branch, e.g." >&2
+      echo "       ./run-dsh.sh web api" >&2
+      echo "       ./run-dsh.sh web ~/Development/inventrip_api" >&2
+    else
+      echo "[dsh] workspace mount: $MNT" >&2
+    fi
     # The web entrypoint runs dsh on 127.0.0.1 (safety) and socat-proxies
     # 0.0.0.0:8080 so Docker can publish the port. --service-ports publishes.
     # dsh prints a one-time tokenized URL at startup; tee the output to a temp
@@ -186,22 +222,25 @@ case "${1:-}" in
     ) &
     _web_watcher=$!
     # shellcheck disable=SC2086
-    ( set +e; docker compose run --rm --service-ports $MNT dsh-web 2>&1 | tee "$_web_log" ) || true
+    ( set +e; docker compose run --rm --service-ports $MNT $HRM dsh-web 2>&1 | tee "$_web_log" ) || true
     kill "$_web_watcher" 2>/dev/null || true
     rm -f "$_web_log"
     ;;
   headless)
     ensure_router
     shift
+    HRM=$(host_runtime_mounts)
     if [ "${1:-}" = "--bg" ]; then
       shift
       JOB="$1"; shift
       MNT=$(mount_project "$(resolve_project "${1:-}")")
+      MNT="$MNT $HRM"
       preflight_headless || exit 1
       run_headless_bg "$JOB"
     else
       JOB="$1"; shift
       MNT=$(mount_project "$(resolve_project "${1:-}")")
+      MNT="$MNT $HRM"
       preflight_headless || exit 1
       run_headless_logged "$JOB"
     fi
@@ -235,6 +274,10 @@ case "${1:-}" in
     # Prefer host seed script so volume-layout fixes apply without image rebuild.
     if [ -f "$SCRIPT_DIR/seed-omlx.sh" ]; then
       _seed_vols="$_seed_vols -v $SCRIPT_DIR/seed-omlx.sh:/usr/local/bin/seed-omlx.sh:ro"
+    fi
+    # Local plugins (git-branch-dock) without requiring image rebuild.
+    if [ -d "$SCRIPT_DIR/plugins" ]; then
+      _seed_vols="$_seed_vols -v $SCRIPT_DIR/plugins:/opt/dsh-plugins:ro"
     fi
     # shellcheck disable=SC2086
     docker compose run --rm $_seed_vols --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless
