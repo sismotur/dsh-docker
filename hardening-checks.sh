@@ -87,5 +87,25 @@ else
   no "perm:default-preset-workspace-write" "dsh-permission-presets/lib/index.js not found"
 fi
 
+
+# ---------------------------------------------------------------------------
+# Agent packs baked into the image (no confidential private packs)
+# ---------------------------------------------------------------------------
+
+check      "agents:public-baked"           test -d /opt/dsh-patches/agents/public
+check      "agents:public-core-baked"      test -f /opt/dsh-patches/agents/public/10-core.md
+check      "agents:example-baked"          test -d /opt/dsh-patches/agents/private.example
+# Private host packs must NOT ship in the image
+check_fail "agents:private-not-baked"      test -d /opt/dsh-patches/agents/private
+check_fail "agents:no-monolith-baked"      test -f /opt/dsh-patches/agents-global.md
+
+# Scanned public tree inside image must not hold inventrip production IDs
+if grep -RIn -E 'voltaic-azimuth-105813|inventrip-postgres-f24a92b2|34\.88\.69\.68|fsanti@sismotur' /opt/dsh-patches/agents/public /opt/dsh-patches/agents/private.example 2>/dev/null | grep -q .; then
+  no "agents:image-packs-no-secrets" "confidential marker in baked agent packs"
+else
+  ok "agents:image-packs-no-secrets"
+fi
+
+
 printf '\nIN-CONTAINER: %d passed, %d failed\n' "$pass" "$fail"
 exit "$fail"

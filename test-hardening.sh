@@ -70,6 +70,128 @@ hcheck "host:lockfile-exists-pty-build"    test -f pty-build/package-lock.json
 hcheck "host:lockfile-integrity-global-tools" lockfile_integrity global-tools/package-lock.json
 hcheck "host:lockfile-integrity-pty-build"    lockfile_integrity pty-build/package-lock.json
 
+
+# ---------------------------------------------------------------------------
+# Agent packs + secret-leak gates (public/private split)
+# ---------------------------------------------------------------------------
+
+# Public packs present and numbered
+hcheck "agents:public-dir"              test -d agents/public
+hcheck "agents:public-core"             test -f agents/public/10-core.md
+hcheck "agents:public-has-md"           sh -c 'ls agents/public/*.md >/dev/null 2>&1'
+hcheck "agents:private-example-dir"     test -d agents/private.example
+hcheck "agents:readme"                  test -f agents/README.md
+
+# Monolithic file must be gone
+hcheck_fail "agents:no-monolithic-global" test -f agents-global.md
+
+# Dockerfile bakes public + examples only — never private/
+hcheck "agents:dockerfile-copy-public"  grep -q 'agents/public' Dockerfile
+hcheck "agents:dockerfile-copy-example" grep -q 'agents/private.example' Dockerfile
+if grep -E 'COPY[[:space:]]+agents/private(/|[[:space:]])' Dockerfile >/dev/null 2>&1; then
+  hno "agents:dockerfile-no-private-copy" "Dockerfile copies agents/private"
+else
+  hok "agents:dockerfile-no-private-copy"
+fi
+hcheck_fail "agents:dockerfile-no-agents-global" grep -q 'agents-global.md' Dockerfile
+
+# seed concatenates packs into AGENTS.md
+hcheck "agents:seed-public-dir-ref"     grep -q 'agents/public' seed-omlx.sh
+hcheck "agents:seed-private-dir-ref"    grep -q 'agents/private' seed-omlx.sh
+hcheck "agents:seed-writes-AGENTS"      grep -q 'AGENTS.md' seed-omlx.sh
+hcheck_fail "agents:seed-no-cp-monolith" grep -q 'cp -f /opt/dsh-patches/agents-global.md' seed-omlx.sh
+
+# run-dsh seed mounts private when present
+hcheck "agents:run-dsh-seed-mount-private" grep -q 'agents/private:/opt/dsh-patches/agents/private' run-dsh.sh
+
+# gitignore covers confidential paths
+hcheck "agents:gitignore-private"       grep -q 'agents/private/' .gitignore
+hcheck "agents:gitignore-projects-local" grep -q 'projects.local.sh' .gitignore
+
+# If git is available: private must not be tracked; ignore must apply
+if command -v git >/dev/null 2>&1 && [ -d .git ]; then
+  if git ls-files --error-unmatch agents/private >/dev/null 2>&1; then
+    hno "agents:git-private-untracked" "agents/private is tracked by git"
+  else
+    # also ensure no files under private are tracked
+    if git ls-files 'agents/private/*' 2>/dev/null | grep -q .; then
+      hno "agents:git-private-untracked" "files under agents/private are tracked"
+    else
+      hok "agents:git-private-untracked"
+    fi
+  fi
+  if git check-ignore -q agents/private/20-inventrip-gcp.md 2>/dev/null \
+     || git check-ignore -q agents/private 2>/dev/null; then
+    hok "agents:git-ignores-private"
+  else
+    # private dir may be empty in CI; check gitignore pattern instead
+    if grep -q '^agents/private/' .gitignore; then
+      hok "agents:git-ignores-private"
+    else
+      hno "agents:git-ignores-private" "not ignored"
+    fi
+  fi
+  if git ls-files --error-unmatch projects.local.sh >/dev/null 2>&1; then
+    hno "agents:git-projects-local-untracked" "projects.local.sh is tracked"
+  else
+    hok "agents:git-projects-local-untracked"
+  fi
+  if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+    hno "agents:git-env-untracked" ".env is tracked"
+  else
+    hok "agents:git-env-untracked"
+  fi
+else
+  hok "agents:git-checks-skipped"
+fi
+
+# Secret-leak scan over committed / would-be-public paths only
+# (exclude agents/private, .env, projects.local.sh, lockfiles, .git)
+secret_scan() {
+  # Returns 0 if CLEAN (no matches), 1 if leak found (prints matches)
+  _pat='voltaic-azimuth-105813|fsanti@sismotur\\.com|inventrip-postgres-f24a92b2|inventrip-gke-production|34\\.88\\.69\\.68|10\\.166\\.0\\.2|wordpress-website-sismotur-vm|sismotur-tools'
+  # Use git ls-files when possible so we only scan tracked files
+  if command -v git >/dev/null 2>&1 && [ -d .git ]; then
+    # Exclude this suite and lockfiles — patterns are listed here as detectors.
+    _hits=$(git grep -nI -E "$_pat" -- . \
+      ':(exclude)*.lock' ':(exclude)*package-lock.json' \
+      ':(exclude)test-hardening.sh' ':(exclude)hardening-checks.sh' \
+      2>/dev/null || true)
+  else
+    _hits=$(grep -RIn -E "$_pat" \
+      --exclude-dir=agents/private --exclude-dir=.git --exclude-dir=node_modules \
+      --exclude-dir=runs --exclude=.env --exclude=projects.local.sh \
+      --exclude=test-hardening.sh --exclude=hardening-checks.sh \
+      . 2>/dev/null || true)
+  fi
+  if [ -n "$_hits" ]; then
+    printf '%s\n' "$_hits"
+    return 1
+  fi
+  return 0
+}
+if _leak_out=$(secret_scan); then
+  hok "secrets:no-confidential-in-tracked"
+else
+  hno "secrets:no-confidential-in-tracked" "confidential markers in tracked files"
+  printf '%s\n' "$_leak_out" | sed 's/^/  /' | head -20
+fi
+
+# private.example must not contain real inventrip production IDs
+if grep -RIn -E 'voltaic-azimuth-105813|inventrip-postgres-f24a92b2|34\\.88\\.69\\.68|fsanti@sismotur' agents/private.example >/dev/null 2>&1; then
+  hno "secrets:examples-are-placeholders" "private.example contains real identifiers"
+else
+  hok "secrets:examples-are-placeholders"
+fi
+
+# Public packs must not contain those either
+if grep -RIn -E 'voltaic-azimuth-105813|inventrip-postgres-f24a92b2|34\\.88\\.69\\.68|fsanti@sismotur|inventrip_ios2|inventrip_android2' agents/public >/dev/null 2>&1; then
+  hno "secrets:public-packs-clean" "public packs contain confidential markers"
+else
+  hok "secrets:public-packs-clean"
+fi
+
+
 echo "host static: $HOST_PASS passed, $HOST_FAIL failed"
 
 if [ "$BUILD" = 1 ]; then
