@@ -43,6 +43,13 @@
   config:
     provider: deepseek-official
     model: smart-router
+
+# Local TensorFold backends only accept function tools. Disable dsh built-in
+# web_search / web_search_preview server tools so they are not advertised to the model.
+- id: tool-web
+  disabled: true
+- id: web-search-deepseek
+  disabled: true
 # MCP memory server: knowledge-graph memory across sessions. Pre-installed in
 # the image (no npx, no runtime network). The memory file persists on the
 # DSH_HOME volume at /data/memory.jsonl. Tools are exposed as mcp__memory__*.

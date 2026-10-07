@@ -24,3 +24,6 @@ agents/private/
 
 # Local project path aliases for run-dsh.sh
 projects.local.sh
+
+__pycache__/
+*.pyc

@@ -1,0 +1,4 @@
+# Bundle patch: mount this plugin into the web profile loader.
+- insert:
+    - id: git-branch-dock
+      name: dsh-git-branch-dock

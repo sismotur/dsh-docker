@@ -63,6 +63,8 @@ COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.ym
 COPY agents/public/               /opt/dsh-patches/agents/public/
 COPY agents/private.example/      /opt/dsh-patches/agents/private.example/
 COPY LICENSE NOTICE.md                 /opt/dsh-patches/
+# Local dsh plugins (composer git branch dock, etc.)
+COPY plugins/ /opt/dsh-plugins/
 COPY seed-omlx.sh /usr/local/bin/seed-omlx.sh
 COPY register-workspace.sh /usr/local/bin/register-workspace.sh
 COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh

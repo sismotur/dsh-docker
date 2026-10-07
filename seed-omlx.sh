@@ -48,8 +48,12 @@ fi
 
 echo "seeded $AGENTS_OUT (public packs: $_pub_n, private packs: $_priv_n, lines: $(wc -l < "$AGENTS_OUT"))"
 
-# pnpm store on the writable volume (rootfs is read-only at runtime).
-mkdir -p "${PNPM_HOME:-$DSH_HOME/.pnpm}"
+# Writable scratch + package caches on the volume (not the 64MB noexec /tmp).
+mkdir -p \
+  "${PNPM_HOME:-$DSH_HOME/.pnpm}" \
+  "$DSH_HOME/tmp" \
+  "$DSH_HOME/.npm" \
+  "$DSH_HOME/cache"
 
 # Default model: smart-router -> TensorFold. Saved settings.yaml overrides cordis.
 cat > "$DSH_HOME/settings.yaml" << 'SEOF'
@@ -60,4 +64,41 @@ agent-default-model:
   model: smart-router
   reasoningEffort: high
 SEOF
+
+# Web profile: ensure local git-branch-dock plugin (composer footer branch).
+_PLUGIN_SRC="/opt/dsh-plugins/dsh-git-branch-dock"
+_WEB_PKG="$DSH_HOME/profiles/web/package.json"
+if [ -d "$_PLUGIN_SRC" ] && [ -f "$_WEB_PKG" ]; then
+  if ! grep -q '"dsh-git-branch-dock"' "$_WEB_PKG" 2>/dev/null; then
+    echo "seeding dsh-git-branch-dock into web profile…"
+    # Prefer dsh plugin CLI when available; fall back to package.json edit + pnpm.
+    if command -v dsh >/dev/null 2>&1; then
+      dsh plugin --profile web add "$_PLUGIN_SRC" \
+        || dsh plugin --profile web add "$_PLUGIN_SRC" --config.ignore-scripts=false \
+        || echo "seed warning: dsh plugin add dsh-git-branch-dock failed" >&2
+    fi
+  fi
+  # Ensure bundle list includes the plugin so the host + client load.
+  if command -v node >/dev/null 2>&1; then
+    WEB_PKG="$_WEB_PKG" node - <<'NODE' || true
+const fs = require('fs');
+const p = process.env.WEB_PKG;
+const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+j.dsh = j.dsh || {};
+j.dsh.profile = j.dsh.profile || {};
+j.dsh.profile.bundles = j.dsh.profile.bundles || [];
+if (!j.dsh.profile.bundles.includes('dsh-git-branch-dock')) {
+  j.dsh.profile.bundles.push('dsh-git-branch-dock');
+}
+j.dependencies = j.dependencies || {};
+if (!j.dependencies['dsh-git-branch-dock']) {
+  j.dependencies['dsh-git-branch-dock'] = 'file:/opt/dsh-plugins/dsh-git-branch-dock';
+}
+fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+NODE
+    (cd "$DSH_HOME/profiles/web" && pnpm install --config.ignore-scripts=true) \
+      || echo "seed warning: pnpm install for git-branch-dock failed" >&2
+  fi
+fi
+
 echo "TensorFold/oMLX patches + agent packs + pnpm store + default model ready."

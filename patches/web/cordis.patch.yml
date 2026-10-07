@@ -43,6 +43,13 @@
   config:
     provider: deepseek-official
     model: smart-router
+
+# Local TensorFold backends only accept function tools. Disable dsh built-in
+# web_search / web_search_preview server tools so they are not advertised to the model.
+- id: tool-web
+  disabled: true
+- id: web-search-deepseek
+  disabled: true
 # Match this Warp instance's terminal font size (appearance.text.font_size in
 # ~/.warp/settings.toml). DSH only exposes content font size (12-17px); it has
 # no font-family setting, so the font type itself cannot be matched here.

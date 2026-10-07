@@ -15,7 +15,11 @@ x-dsh-base: &dsh-base
     - /tmp:noexec,nosuid,size=64m
   volumes:
     - dsh-home:/data
-    - ./workspace:/workspace
+    # /workspace is always supplied by run-dsh.sh mount_project (project path or
+    # ./workspace) together with WORKSPACE_NAME=<folder-basename> so the UI/
+    # terminal show inventrip_api (etc.), not the generic label "workspace".
+    # Local plugins (file: deps + cordis inserts); host edits apply without rebuild.
+    - ./plugins:/opt/dsh-plugins:ro
   pids_limit: 512
   mem_limit: 4g
   cpus: "4"
@@ -47,6 +51,19 @@ x-dsh-base: &dsh-base
     # is clearer and survives non-Docker runtimes.
     - DSH_ISOLATION_PLATFORM=docker
     - IS_SANDBOXED=1
+    # dsh 0.2+ materializes native addons under os.tmpdir() by default; our
+    # /tmp is noexec, which breaks dlopen ("failed to map segment"). Disable
+    # the cache so prebuilds load from the executable rootfs under /usr/local.
+    - NARB_DISABLE_NATIVE_CACHE=1
+    # Installers (pnpm/npm) and many tools default to os.tmpdir()=/tmp.
+    # /tmp is a 64MB noexec tmpfs (hardening). Point scratch + package caches
+    # at the writable dsh-home volume so plugin installs do not ENOSPC.
+    - TMPDIR=/data/tmp
+    - TMP=/data/tmp
+    - TEMP=/data/tmp
+    - npm_config_cache=/data/.npm
+    - XDG_CACHE_HOME=/data/cache
+    # PNPM_HOME is also set in the image ENV to /data/.pnpm
 
 services:
   # LiteLLM proxy: routes dsh -> TensorFold (:8421, ~/models/tensorfold) primary,
@@ -77,7 +94,8 @@ services:
 
   dsh-web:
     <<: *dsh-base
-    entrypoint: ["/usr/local/bin/web-entrypoint.sh"]
+    # sh wrapper: host bind-mount of entrypoint may lack +x
+    entrypoint: ["sh", "/usr/local/bin/web-entrypoint.sh"]
     ports:
       - "127.0.0.1:8080:8080"
 
