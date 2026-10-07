@@ -60,7 +60,8 @@ RUN printf '[safe]\n\tdirectory = /workspace\n' > /etc/gitconfig
 # Container-variant oMLX patches (host.docker.internal baseURL), baked read-only.
 COPY patches/web/cordis.patch.yml      /opt/dsh-patches/web/cordis.patch.yml
 COPY patches/headless/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml
-COPY agents-global.md            /opt/dsh-patches/agents-global.md
+COPY agents/public/               /opt/dsh-patches/agents/public/
+COPY agents/private.example/      /opt/dsh-patches/agents/private.example/
 COPY seed-omlx.sh /usr/local/bin/seed-omlx.sh
 COPY register-workspace.sh /usr/local/bin/register-workspace.sh
 COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh

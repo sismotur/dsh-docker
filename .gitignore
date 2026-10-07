@@ -18,3 +18,9 @@ dsh-manual.pdf
 
 # macOS Finder metadata
 .DS_Store
+
+# Confidential agent packs (host-only; mounted at seed)
+agents/private/
+
+# Local project path aliases for run-dsh.sh
+projects.local.sh

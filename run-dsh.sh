@@ -7,7 +7,7 @@
 #   ./run-dsh.sh headless "..."    # one-shot headless job
 #   ./run-dsh.sh headless "..." <project>  # headless, with <project> at /workspace
 #   ./run-dsh.sh headless --bg "..." [project]  # same, detached; check back with logs/runs
-#   <project> = a path or an alias: api | android | ios | inventrip | signing
+#   <project> = a path or an alias defined in projects.local.sh
 #   ./run-dsh.sh plugin web add <pkg>   # manage plugins (pnpm) in a profile
 #   ./run-dsh.sh enable-terminal         # inject prebuilt node-pty into dsh-better-sidebar
 #   ./run-dsh.sh sessions               # list recent dsh sessions (id, turns, title)
@@ -42,17 +42,21 @@ mount_project() {
   echo "-v $abs:/workspace -e WORKSPACE_NAME=$name"
 }
 
-# Expand a short project alias to its full path, or pass it through unchanged
-# so a literal path still works. All aliases live under $HOME/Development.
+# Expand a short project alias (projects.local.sh) or pass a path through.
+# Expand a short project alias via optional projects.local.sh, else pass through.
+# Copy projects.example.sh -> projects.local.sh (gitignored) for machine paths.
 resolve_project() {
-  case "$1" in
-    api)       printf '%s' "$HOME/Development/inventrip_api" ;;
-    android)   printf '%s' "$HOME/Development/inventrip_android2" ;;
-    ios)       printf '%s' "$HOME/Development/inventrip_ios2" ;;
-    inventrip) printf '%s' "$HOME/Development/inventrip3" ;;
-    signing)   printf '%s' "$HOME/Development/signing4" ;;
-    *)         printf '%s' "$1" ;;
-  esac
+  if [ -f "$SCRIPT_DIR/projects.local.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$SCRIPT_DIR/projects.local.sh"
+    # projects_resolve is a shell function from projects.local.sh
+    _rp=$(projects_resolve "$1" 2>/dev/null) || _rp=""
+    if [ -n "$_rp" ]; then
+      printf '%s' "$_rp"
+      return
+    fi
+  fi
+  printf '%s' "$1"
 }
 
 # Ensure the LiteLLM router is running before dsh starts.
@@ -208,7 +212,17 @@ case "${1:-}" in
     docker compose run --rm dsh-headless plugin --profile "$profile" "$@"
     ;;
   seed)
-    docker compose run --rm --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless
+    # Mount host agent packs: public always (fresh edits without rebuild),
+    # private only when present (confidential; gitignored).
+    _seed_vols=""
+    if [ -d "$SCRIPT_DIR/agents/public" ]; then
+      _seed_vols="$_seed_vols -v $SCRIPT_DIR/agents/public:/opt/dsh-patches/agents/public:ro"
+    fi
+    if [ -d "$SCRIPT_DIR/agents/private" ]; then
+      _seed_vols="$_seed_vols -v $SCRIPT_DIR/agents/private:/opt/dsh-patches/agents/private:ro"
+    fi
+    # shellcheck disable=SC2086
+    docker compose run --rm $_seed_vols --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless
     ;;
   enable-terminal)
     docker compose run --rm --entrypoint /usr/local/bin/enable-terminal.sh dsh-headless
@@ -508,7 +522,7 @@ case "${1:-}" in
     ;;
   *)
     echo "Usage: $0 {seed|web|headless [--bg] \"<job>\"|plugin <profile> <pnpm args>|enable-terminal|sessions|runs [latest|<substr>|clean [N]]|logs [latest|<substr>]|stop [latest|<substr>]|exec [cmd...]|task <name> [project]|doctor|status}" >&2
-    echo "  <project> may be a path or alias (api|android|ios|inventrip|signing)" >&2
+    echo "  <project> may be a path or an alias from projects.local.sh (see projects.example.sh)" >&2
     exit 2
     ;;
 esac

@@ -212,6 +212,11 @@ from GCR registry credential helpers and do not affect the build.
 
 ### 4. Seed the oMLX patches (once, and after every `down -v`)
 
+Agent instructions are built from `agents/public/*.md` (git) plus optional
+`agents/private/*.md` (gitignored). See `agents/README.md`. Private packs are
+bind-mounted only during seed when the directory exists.
+
+
 ```sh
 ./run-dsh.sh seed
 ```
@@ -484,8 +489,8 @@ bind-mounts that directory at `/workspace`, so the agent works directly on
 your real repo — no clone, no copy, no syncing:
 
 ```sh
-./run-dsh.sh web ~/Development/inventrip_api
-./run-dsh.sh headless "fix the login bug" ~/Development/inventrip_api
+./run-dsh.sh web ~/Development/my-api
+./run-dsh.sh headless "fix the login bug" ~/Development/my-api
 ```
 
 ### Project aliases
@@ -498,11 +503,11 @@ accepted (`web`, `headless`, `headless --bg`, `task`), saving the full path:
 ./run-dsh.sh headless --bg "run the tests" android
 ```
 
-- `api` → `~/Development/inventrip_api`
-- `android` → `~/Development/inventrip_android2`
-- `ios` → `~/Development/inventrip_ios2`
-- `inventrip` → `~/Development/inventrip3`
-- `signing` → `~/Development/signing4`
+Aliases come from gitignored `projects.local.sh` (copy `projects.example.sh`).
+Example aliases after you customize that file:
+
+- `api` → your API checkout
+- `android` / `ios` / `app` → your mobile or app checkouts
 
 A literal path still works — aliases are resolved first, and anything else
 is passed through to the bind-mount unchanged.
