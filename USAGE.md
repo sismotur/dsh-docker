@@ -156,7 +156,15 @@ curl -sS "http://127.0.0.1:4000/v1/chat/completions" \
 Pass criteria: models list includes `omlx-qwen36` (and optionally `tf-qwen38`);
 chat returns content like `TF OK`.
 
-### 4. Full agent smoke
+### 4. Stream sanitizer (Messages / multi-tool)
+
+```bash
+python3 test_stream_sanitizer.py
+```
+
+Pass criteria: `OK stream sanitizer regression`.
+
+### 5. Full agent smoke
 
 ```bash
 ./run-dsh.sh headless "Say only: DSH OK"
@@ -164,6 +172,8 @@ chat returns content like `TF OK`.
 ```
 
 Pass criteria: headless prints an answer; web UI loads with the token URL.
+Agent turns with tools must not fail with `MALFORMED_RESPONSE` /
+`delta/stop without an open block` (LiteLLM hooks defer block stops).
 
 ## Models in the UI (typical)
 
@@ -195,6 +205,7 @@ docker compose build
 | Native addon / “failed to map segment” | Compose must set `NARB_DISABLE_NATIVE_CACHE=1` (already default here) |
 | Plugin install “no space” on /tmp | `/tmp` is 64MB tmpfs; caches use `/data/tmp` via `TMPDIR` — re-seed or `mkdir -p` under volume; do not fill host `/tmp` |
 | `web_search_preview` / tools error | LiteLLM hook strips built-in OpenAI tools; recreate litellm: `docker compose up -d --force-recreate litellm` |
+| `MALFORMED_RESPONSE` / `delta/stop without an open block` | LiteLLM Responses→Anthropic path closed a tool block before late arg deltas. Fixed in `litellm_hooks.py` stream sanitizer — recreate litellm after pull |
 
 ## More detail
 
