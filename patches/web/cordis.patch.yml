@@ -2,7 +2,8 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# LiteLLM router: dsh -> litellm:4000 -> TensorFold (:8421 fast, :8423 Qwen3.8),
+# LiteLLM router: dsh -> litellm:4000 -> TensorFold
+# (:8421 Qwen3.6, :8425 Nemotron, :8423 Qwen3.8),
 # oMLX (host :8000) optional for VL / non-TF checkpoints.
 # Models root on host: ~/models/tensorfold
 # API key: DEEPSEEK_API_KEY (apiKeyEnv). TensorFold ignores it; oMLX may not.
@@ -24,6 +25,15 @@
       - id: qwen36-35b-4bit
         name: qwen36-35b-4bit (TensorFold alias)
         contextWindow: 131072
+      - id: tf-nemotron
+        name: TensorFold Nemotron 3.5 Lightning + MTP
+        contextWindow: 65536
+      - id: Nemotron-3.5-Lightning-30B-A3B-4bit
+        name: Nemotron 3.5 Lightning (TensorFold alias)
+        contextWindow: 65536
+      - id: nemotron35-lightning-30b-a3b-4bit
+        name: nemotron35-lightning (TensorFold alias)
+        contextWindow: 65536
       - id: tf-qwen38
         name: TensorFold Qwen3.8-27B + DFlash2 (quality)
         contextWindow: 32768

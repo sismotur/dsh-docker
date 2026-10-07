@@ -10,6 +10,7 @@ For full design and security detail, see [README.md](README.md).
   for TensorFold; copy from `.env.example`)
 - TensorFold running on the host for real LLM answers
   - Fast: `http://127.0.0.1:8421` (`omlx-qwen36`)
+  - Nemotron: `http://127.0.0.1:8425` (`tf-nemotron`)
   - Optional quality: `http://127.0.0.1:8423` (`tf-qwen38`)
 
 Optional:
@@ -153,8 +154,8 @@ curl -sS "http://127.0.0.1:4000/v1/chat/completions" \
   }'
 ```
 
-Pass criteria: models list includes `omlx-qwen36` (and optionally `tf-qwen38`);
-chat returns content like `TF OK`.
+Pass criteria: models list includes `omlx-qwen36` (and optionally `tf-nemotron`,
+`tf-qwen38`); chat returns content like `TF OK`.
 
 ### 4. Stream sanitizer (Messages / multi-tool)
 
@@ -185,7 +186,8 @@ Composer footer shows `inventrip_api @ dev-app ---` then stats
 | Choice | Backend | When to use |
 | --- | --- | --- |
 | `smart-router` | TensorFold fast (`omlx-qwen36`) | Default |
-| `omlx-qwen36` | `:8421` | Fast coding |
+| `omlx-qwen36` | `:8421` | Fast coding, large context |
+| `tf-nemotron` | `:8425` | Nemotron 3.5 Lightning + MTP |
 | `tf-qwen38` / `Qwen3.8-27B-OptiQ-4bit` | `:8423` | Higher quality, slower |
 
 ## After pulling updates
@@ -203,6 +205,7 @@ docker compose build
 | Symptom | What to try |
 | --- | --- |
 | Doctor: TensorFold not reachable | `tensorfold service status` / start `omlx-qwen36` |
+| Nemotron down | `tensorfold service start tf-nemotron` (`:8425`) |
 | Headless fails immediately | Check `.env` key; `./run-dsh.sh status` |
 | LiteLLM down | `docker compose up -d litellm` |
 | Old dsh behavior after upgrade | `docker compose build` (image must match lockfile) |
@@ -211,7 +214,7 @@ docker compose build
 | Plugin install “no space” on /tmp | `/tmp` is 64MB tmpfs; caches use `/data/tmp` via `TMPDIR` — re-seed or `mkdir -p` under volume; do not fill host `/tmp` |
 | `web_search_preview` / tools error | LiteLLM hook strips built-in OpenAI tools; recreate litellm: `docker compose up -d --force-recreate litellm` |
 | `MALFORMED_RESPONSE` / `delta/stop without an open block` | LiteLLM Responses→Anthropic path closed a tool block before late arg deltas. Fixed in `litellm_hooks.py` stream sanitizer — recreate litellm after pull |
-| `STREAM_CLOSED` / ended before `message_stop` | Usually TF rejected the request (prompt + max_tokens over context) and LiteLLM aborted SSE mid-stream. Hooks now clamp max_tokens per model context and synthesize `message_stop` on abort — recreate litellm after pull. Prefer `omlx-qwen36` (131k ctx) for large agent turns; `tf-qwen38` is 32k |
+| `STREAM_CLOSED` / ended before `message_stop` | Usually TF rejected the request (prompt + max_tokens over context) and LiteLLM aborted SSE mid-stream. Hooks now clamp max_tokens per model context and synthesize `message_stop` on abort — recreate litellm after pull. Prefer `omlx-qwen36` (131k ctx) for large agent turns; `tf-nemotron` is 65k; `tf-qwen38` is 32k |
 
 ## More detail
 

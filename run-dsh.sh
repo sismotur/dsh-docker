@@ -412,6 +412,15 @@ case "${1:-}" in
     else
       echo "down -- tensorfold service start tf-qwen38"
     fi
+    printf 'TensorFold Nemotron (:8425):     '
+    if TFN_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8425/v1/models 2>/dev/null); then
+      echo "reachable  (tf-nemotron + MTP)"
+      if command -v jq >/dev/null 2>&1; then
+        printf '%s' "$TFN_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
+      fi
+    else
+      echo "down -- tensorfold service start tf-nemotron"
+    fi
     printf 'oMLX server (127.0.0.1:8000):     '
     if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
       echo "reachable (optional)"

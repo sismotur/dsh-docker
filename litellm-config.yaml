@@ -2,9 +2,10 @@
 # dsh -> http://litellm:4000/v1
 #
 # Primary backend: TensorFold on the host (OpenAI-compatible).
-#   models root: ~/models/tensorfold  (symlinks into ~/.omlx/models)
-#   fast:    omlx-qwen36 @ :8421 (--context 131072)
-#   quality: tf-qwen38   @ :8423 (Qwen3.8-27B + DFlash2, --context 32768)
+#   models root: ~/models/tensorfold  (symlinks into ~/.omlx/models / HF cache)
+#   fast:     omlx-qwen36  @ :8421 (--context 131072)
+#   nemotron: tf-nemotron  @ :8425 (Nemotron 3.5 Lightning + MTP, --context 65536)
+#   quality:  tf-qwen38    @ :8423 (Qwen3.8-27B + DFlash2, --context 32768)
 # Optional: oMLX on :8000 for checkpoints TensorFold cannot serve (e.g. VL).
 
 model_list:
@@ -73,6 +74,37 @@ model_list:
         chat_template_kwargs:
           enable_thinking: false
 
+  # --- TensorFold Nemotron 3.5 Lightning + MTP (fast MoE) ---
+  - model_name: tf-nemotron
+    litellm_params:
+      model: openai/tf-nemotron
+      api_base: http://host.docker.internal:8425/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  - model_name: Nemotron-3.5-Lightning-30B-A3B-4bit
+    litellm_params:
+      model: openai/tf-nemotron
+      api_base: http://host.docker.internal:8425/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
+  - model_name: nemotron35-lightning-30b-a3b-4bit
+    litellm_params:
+      model: openai/tf-nemotron
+      api_base: http://host.docker.internal:8425/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      drop_params: true
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false
+
   # --- oMLX optional (host :8000) — only if oMLX is running ---
 
   - model_name: DeepSeek-V4-Flash-0731-2.4bit-mixed
@@ -126,6 +158,15 @@ litellm_settings:
         - omlx-qwen36
     - qwen38-27b-optiq-4bit:
         - tf-qwen38
+        - omlx-qwen36
+    - tf-nemotron:
+        - Nemotron-3.5-Lightning-30B-A3B-4bit
+        - omlx-qwen36
+    - Nemotron-3.5-Lightning-30B-A3B-4bit:
+        - tf-nemotron
+        - omlx-qwen36
+    - nemotron35-lightning-30b-a3b-4bit:
+        - tf-nemotron
         - omlx-qwen36
     - DeepSeek-V4-Flash-0731-2.4bit-mixed:
         - omlx-qwen36

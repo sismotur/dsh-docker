@@ -30,6 +30,9 @@ MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "tf-qwen38": 32768,
     "Qwen3.8-27B-OptiQ-4bit": 32768,
     "qwen38-27b-optiq-4bit": 32768,
+    "tf-nemotron": 65536,
+    "Nemotron-3.5-Lightning-30B-A3B-4bit": 65536,
+    "nemotron35-lightning-30b-a3b-4bit": 65536,
     "smart-router": 131072,
 }
 DEFAULT_CONTEXT_LIMIT = 32768
@@ -48,6 +51,9 @@ TENSORFOLD_MODELS = frozenset(
         "tf-qwen38",
         "Qwen3.8-27B-OptiQ-4bit",
         "qwen38-27b-optiq-4bit",
+        "tf-nemotron",
+        "Nemotron-3.5-Lightning-30B-A3B-4bit",
+        "nemotron35-lightning-30b-a3b-4bit",
         "smart-router",
     }
 )
