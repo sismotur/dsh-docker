@@ -192,6 +192,12 @@ else
 fi
 
 
+
+# dsh pin + 0.2 surface expectations (package metadata)
+hcheck "dsh:package-pin-0.2" grep -Fq "0.2.0-rc.2" global-tools/package.json
+hcheck "dsh:lock-pin-0.2" grep -Fq "dsh-0.2.0-rc.2.tgz" global-tools/package-lock.json
+
+
 echo "host static: $HOST_PASS passed, $HOST_FAIL failed"
 
 if [ "$BUILD" = 1 ]; then

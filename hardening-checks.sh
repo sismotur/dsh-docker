@@ -107,5 +107,57 @@ else
 fi
 
 
+
+# ---------------------------------------------------------------------------
+# dsh 0.2.x surface defaults (experimental packs / sensitive plugins)
+# ---------------------------------------------------------------------------
+
+# Installed dsh version should match the lock pin when package.json is readable
+DSH_PKG=$(find /usr/local/lib/node_modules -path '*/@deepseek-ai/dsh/package.json' 2>/dev/null | head -1)
+if [ -n "$DSH_PKG" ]; then
+  VER=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DSH_PKG" | head -1)
+  case "$VER" in
+    0.2.0-rc.2) ok "dsh:installed-0.2.0-rc.2" ;;
+    *) no "dsh:installed-0.2.0-rc.2" "got '$VER'" ;;
+  esac
+else
+  no "dsh:installed-0.2.0-rc.2" "dsh package.json not found"
+fi
+
+# Experimental package names may exist as dependencies of dsh, but seeded
+# profile patches must not enable experimental bundles by id.
+for prof in /data/profiles/web/cordis.patch.yml /data/profiles/headless/cordis.patch.yml \
+            /opt/dsh-patches/web/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml; do
+  [ -f "$prof" ] || continue
+  if grep -qiE 'experimental-agent-team|experimental-auto-review|experimental-schedule|experimental-voice|dsh-experimental' "$prof"; then
+    no "dsh:profiles-no-experimental" "experimental reference in $prof"
+  fi
+done
+# If none of the profile files failed above, pass once
+if grep -qiE 'experimental-agent-team|experimental-auto-review|experimental-schedule|experimental-voice|dsh-experimental' \
+     /opt/dsh-patches/web/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml 2>/dev/null; then
+  :
+else
+  ok "dsh:profiles-no-experimental"
+fi
+
+# HTTP proxy plugin: must not appear enabled in our patches (egress risk)
+if grep -qiE 'dsh-http-proxy|http-proxy' /opt/dsh-patches/web/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml 2>/dev/null; then
+  no "dsh:profiles-no-http-proxy" "http proxy referenced in cordis patches"
+else
+  ok "dsh:profiles-no-http-proxy"
+fi
+
+# MCP: only the explicit memory insert we ship — no broad mcp enable of resources
+if grep -qiE 'mcp-resources|dsh-mcp-resources' /opt/dsh-patches/web/cordis.patch.yml /opt/dsh-patches/headless/cordis.patch.yml 2>/dev/null; then
+  no "dsh:profiles-no-mcp-resources" "mcp-resources referenced in cordis patches"
+else
+  ok "dsh:profiles-no-mcp-resources"
+fi
+
+# Our MCP memory insert should still be present in baked patches
+check "dsh:mcp-memory-patch-present" sh -c 'grep -q mcp-memory /opt/dsh-patches/web/cordis.patch.yml && grep -q mcp-memory /opt/dsh-patches/headless/cordis.patch.yml'
+
+
 printf '\nIN-CONTAINER: %d passed, %d failed\n' "$pass" "$fail"
 exit "$fail"

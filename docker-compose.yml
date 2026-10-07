@@ -47,6 +47,10 @@ x-dsh-base: &dsh-base
     # is clearer and survives non-Docker runtimes.
     - DSH_ISOLATION_PLATFORM=docker
     - IS_SANDBOXED=1
+    # dsh 0.2+ materializes native addons under os.tmpdir() by default; our
+    # /tmp is noexec, which breaks dlopen ("failed to map segment"). Disable
+    # the cache so prebuilds load from the executable rootfs under /usr/local.
+    - NARB_DISABLE_NATIVE_CACHE=1
 
 services:
   # LiteLLM proxy: routes dsh -> TensorFold (:8421, ~/models/tensorfold) primary,

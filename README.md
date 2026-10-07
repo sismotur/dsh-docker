@@ -10,6 +10,12 @@ container instead of bare-metal on the host.
 > [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness).
 > Upstream is MIT-licensed; see `LICENSE` (this project) and `NOTICE.md`
 > (third-party attribution).
+>
+> **Pinned dsh version:** `@deepseek-ai/dsh@0.2.0-rc.2` (see
+> `global-tools/package.json` + lockfile). Upstream is a *developer preview*
+> and may ship compatibility-breaking changes — this image pins a known RC
+> rather than tracking `latest`. Docs:
+> [deepseek-harness documentation](https://deepseek-harness.github.io/deepseek-harness/).
 
 
 ## Table of contents
@@ -53,6 +59,9 @@ This setup confines it to a non-root, capability-stripped, read-only-root
 container with only one workspace directory exposed.
 
 ## Hardening configuration
+
+**Note (dsh ≥ 0.2):** native Node addons must not be cached under the `noexec` `/tmp`. This compose sets `NARB_DISABLE_NATIVE_CACHE=1` so prebuilds load from `/usr/local`.
+
 
 Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
 (build). The verified effect is what was observed during validation.
@@ -183,6 +192,20 @@ or `workspace-write`) unless deliberately opted in. Never inject a setting
 that relaxes approval or widens the sandbox as a build or env default.
 
 ## Prerequisites
+
+### Pinned toolchain
+
+| Component | Version / source |
+| --- | --- |
+| `@deepseek-ai/dsh` | **0.2.0-rc.2** (`global-tools/package-lock.json`) |
+| Node base image | see `Dockerfile` (`node:…-slim`) |
+| pnpm (in image) | pinned in `global-tools/package.json` |
+
+Upstream Harness docs: https://deepseek-harness.github.io/deepseek-harness/
+
+DeepSeek Harness is in developer preview. Prefer the pin above; do not bump to
+npm `latest`/`alpha` without rebuilding and running `./test-hardening.sh`.
+
 
 - Docker Desktop running.
 - A local oMLX OpenAI-compatible server on `http://127.0.0.1:8000/v1` (host).
@@ -1019,6 +1042,18 @@ non-zero on any failure, so it can gate a pre-deploy check. Requires `docker`,
 - `hardening-checks.sh` — in-container invariant checks (uid, caps, no-new-privs, read-only rootfs, /tmp noexec, no setuid, no build tools, gitconfig, ignore-scripts, node-pty prebuild, env-scrub pattern, default preset); invoked by `test-hardening.sh`.
 - `.env.example` — API key and git identity template.
 
+
+
+### Inspect composed dsh config (optional)
+
+After the image is built, you can dump the effective profile config inside the
+container (useful after upgrades):
+
+```bash
+./run-dsh.sh exec dsh --profile headless --dump-config 2>/dev/null | head
+# or, if supported by your pin:
+# ./run-dsh.sh exec dsh --help
+```
 
 ## License and attribution
 
