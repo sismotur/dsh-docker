@@ -221,6 +221,13 @@ case "${1:-}" in
     if [ -d "$SCRIPT_DIR/agents/private" ]; then
       _seed_vols="$_seed_vols -v $SCRIPT_DIR/agents/private:/opt/dsh-patches/agents/private:ro"
     fi
+    # Always prefer host cordis patches at seed so profile fixes apply without rebuild.
+    if [ -d "$SCRIPT_DIR/patches/web" ]; then
+      _seed_vols="$_seed_vols -v $SCRIPT_DIR/patches/web:/opt/dsh-patches/web:ro"
+    fi
+    if [ -d "$SCRIPT_DIR/patches/headless" ]; then
+      _seed_vols="$_seed_vols -v $SCRIPT_DIR/patches/headless:/opt/dsh-patches/headless:ro"
+    fi
     # shellcheck disable=SC2086
     docker compose run --rm $_seed_vols --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless
     ;;

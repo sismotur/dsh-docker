@@ -1,13 +1,8 @@
 """LiteLLM proxy hooks for dsh-docker.
 
-dsh's deepseek-official adapter often requests max_tokens on the order of
-the full provider context (e.g. 256000). TensorFold rejects requests where
-prompt + max_tokens exceeds its --context budget. Clamp completion tokens
-before the upstream call.
-
-dsh may also advertise OpenAI built-in tools such as web_search_preview.
-Local TensorFold only accepts classic function tools — strip unsupported
-tool entries so chat/completions reach the model.
+1) Clamp oversized max_tokens from dsh.
+2) Strip OpenAI/Anthropic built-in tool types (web_search_preview, etc.)
+   that TensorFold rejects ("function tools only").
 """
 
 from __future__ import annotations
@@ -16,12 +11,8 @@ from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
 
-# Hard ceiling for completion tokens sent to local backends.
-# TensorFold omlx-qwen36 runs with --context 131072; leave headroom for
-# prompt + chat template + tools. 24k output is enough for agent turns.
 MAX_COMPLETION_TOKENS = 24576
 
-# Models that talk to TensorFold (:8421 fast MoE, :8423 Qwen3.8+DFlash2).
 TENSORFOLD_MODELS = frozenset(
     {
         "omlx-qwen36",
@@ -34,72 +25,111 @@ TENSORFOLD_MODELS = frozenset(
     }
 )
 
-# OpenAI "built-in" tool types TensorFold rejects.
 UNSUPPORTED_TOOL_TYPES = frozenset(
     {
         "web_search_preview",
         "web_search",
+        "web_search_20250305",
         "file_search",
         "code_interpreter",
         "computer",
         "computer_use_preview",
         "image_generation",
         "mcp",
+        "server_tool_use",
     }
 )
 
 
 def _tool_type(tool: Any) -> str | None:
-    if not isinstance(tool, dict):
-        return None
-    t = tool.get("type")
-    if isinstance(t, str):
-        return t
+    if isinstance(tool, dict):
+        t = tool.get("type")
+        return t if isinstance(t, str) else None
     return None
 
 
 def _is_function_tool(tool: Any) -> bool:
-    """Keep classic function / tools API shapes TensorFold can run."""
     if not isinstance(tool, dict):
         return False
     t = _tool_type(tool)
-    if t in UNSUPPORTED_TOOL_TYPES:
+    if t is not None and t in UNSUPPORTED_TOOL_TYPES:
         return False
-    # OpenAI chat: {"type":"function","function":{...}}
     if t == "function":
         return True
-    # Some stacks omit type and only send {"function": {...}}
     if t is None and isinstance(tool.get("function"), dict):
         return True
-    # Legacy name/description/parameters at top level
-    if t is None and "name" in tool and ("parameters" in tool or "description" in tool):
+    # Anthropic classic tools: name + input_schema, no type
+    if t is None and "name" in tool and ("input_schema" in tool or "parameters" in tool):
         return True
-    # Unknown type — drop for local TF rather than 400
     if t is not None and t not in ("function",):
         return False
-    return t == "function" or isinstance(tool.get("function"), dict)
+    return isinstance(tool.get("function"), dict)
 
 
-def _strip_unsupported_tools(data: dict) -> None:
-    for key in ("tools", "functions"):
-        tools = data.get(key)
-        if not isinstance(tools, list) or not tools:
-            continue
-        if key == "functions":
-            # legacy functions array is already function-shaped; keep as-is
-            continue
-        kept = [t for t in tools if _is_function_tool(t)]
-        if len(kept) == len(tools):
-            continue
-        if kept:
-            data[key] = kept
-        else:
-            data.pop(key, None)
-            tc = data.get("tool_choice")
+def _strip_tools_list(tools: list) -> list | None:
+    kept = [t for t in tools if _is_function_tool(t)]
+    return kept
+
+
+def _strip_unsupported_tools_in(obj: Any) -> Any:
+    """Recursively strip unsupported tools from request payloads."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k == "tools" and isinstance(v, list):
+                kept = _strip_tools_list(v)
+                if kept:
+                    out[k] = kept
+                # drop empty tools
+                continue
+            if k == "tool_choice" and isinstance(v, (str, dict)):
+                # defer; fix after tools known
+                out[k] = v
+                continue
+            out[k] = _strip_unsupported_tools_in(v)
+        # clean tool_choice if no tools left
+        if "tool_choice" in out and not out.get("tools"):
+            tc = out.get("tool_choice")
             if tc not in (None, "none", "auto"):
-                data.pop("tool_choice", None)
+                out.pop("tool_choice", None)
             else:
-                data.pop("tool_choice", None)
+                out.pop("tool_choice", None)
+        return out
+    if isinstance(obj, list):
+        return [_strip_unsupported_tools_in(x) for x in obj]
+    return obj
+
+
+def _clamp_max_tokens(data: dict) -> None:
+    model = str(data.get("model") or "")
+    for key in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
+        if key not in data or data[key] is None:
+            continue
+        try:
+            val = int(data[key])
+        except (TypeError, ValueError):
+            continue
+        if val > MAX_COMPLETION_TOKENS:
+            data[key] = MAX_COMPLETION_TOKENS
+    if model in TENSORFOLD_MODELS:
+        if (
+            data.get("max_tokens") is None
+            and data.get("max_completion_tokens") is None
+            and data.get("max_output_tokens") is None
+        ):
+            data["max_tokens"] = min(8192, MAX_COMPLETION_TOKENS)
+
+
+def _mutate_request(data: dict) -> dict:
+    if not isinstance(data, dict):
+        return data
+    cleaned = _strip_unsupported_tools_in(data)
+    if isinstance(cleaned, dict):
+        _clamp_max_tokens(cleaned)
+        # mutate original in place so LiteLLM sees changes
+        data.clear()
+        data.update(cleaned)
+    return data
 
 
 class DshLocalClamp(CustomLogger):
@@ -110,30 +140,53 @@ class DshLocalClamp(CustomLogger):
         data: dict,
         call_type: str,
     ) -> Any:
-        if not isinstance(data, dict):
-            return data
+        return _mutate_request(data) if isinstance(data, dict) else data
 
-        model = str(data.get("model") or "")
-
-        # Always strip built-in tool types for local OpenAI-compatible backends.
-        if model in TENSORFOLD_MODELS or True:
-            _strip_unsupported_tools(data)
-
-        for key in ("max_tokens", "max_completion_tokens"):
-            if key not in data or data[key] is None:
-                continue
-            try:
-                val = int(data[key])
-            except (TypeError, ValueError):
-                continue
-            if val > MAX_COMPLETION_TOKENS:
-                data[key] = MAX_COMPLETION_TOKENS
-
-        if model in TENSORFOLD_MODELS:
-            if data.get("max_tokens") is None and data.get("max_completion_tokens") is None:
-                data["max_tokens"] = min(8192, MAX_COMPLETION_TOKENS)
-
+    async def async_pre_request_hook(
+        self,
+        user_api_key_dict: Any = None,
+        cache: Any = None,
+        data: dict | None = None,
+        call_type: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        if isinstance(data, dict):
+            return _mutate_request(data)
+        # some litellm versions pass payload in kwargs
+        for key in ("data", "request_data", "optional_params"):
+            if isinstance(kwargs.get(key), dict):
+                _mutate_request(kwargs[key])
         return data
+
+    async def async_pre_call_deployment_hook(
+        self,
+        kwargs: dict,
+        call_type: str | None = None,
+        **rest: Any,
+    ) -> Any:
+        if isinstance(kwargs, dict):
+            if isinstance(kwargs.get("messages"), list) or "tools" in kwargs:
+                _mutate_request(kwargs)
+            # litellm often nests under kwargs["optional_params"] or litellm_params
+            for key in ("optional_params", "litellm_params", "model_call_details", "additional_args"):
+                val = kwargs.get(key)
+                if isinstance(val, dict):
+                    _mutate_request(val)
+                    if isinstance(val.get("tools"), list):
+                        _mutate_request(val)
+        return kwargs
+
+    def log_pre_api_call(self, model: str, messages: Any, kwargs: dict) -> None:
+        # sync path used by some code paths
+        if isinstance(kwargs, dict):
+            if "tools" in kwargs:
+                _mutate_request(kwargs)
+            op = kwargs.get("optional_params")
+            if isinstance(op, dict):
+                _mutate_request(op)
+
+    async def async_log_pre_api_call(self, model: str, messages: Any, kwargs: dict) -> None:
+        self.log_pre_api_call(model, messages, kwargs)
 
 
 proxy_handler_instance = DshLocalClamp()
