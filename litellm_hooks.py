@@ -19,6 +19,27 @@ from litellm.integrations.custom_logger import CustomLogger
 
 MAX_COMPLETION_TOKENS = 24576
 
+# TensorFold --context per service. Completion must leave room for agent
+# prompts (system + tools + history). dsh often asks for 256k max_tokens;
+# prompt_tokens + max_tokens > context makes TF reject and LiteLLM aborts
+# the Anthropic SSE without message_stop → dsh STREAM_CLOSED.
+MODEL_CONTEXT_LIMITS: dict[str, int] = {
+    "omlx-qwen36": 131072,
+    "Qwen3.6-35B-A3B-4bit": 131072,
+    "qwen36-35b-4bit": 131072,
+    "tf-qwen38": 32768,
+    "Qwen3.8-27B-OptiQ-4bit": 32768,
+    "qwen38-27b-optiq-4bit": 32768,
+    "smart-router": 131072,
+}
+DEFAULT_CONTEXT_LIMIT = 32768
+# Floor reserved for prompt when token count unknown (tools + AGENTS.md).
+# Agent turns on 32k models often land 12–20k prompt tokens; leave headroom.
+MIN_PROMPT_RESERVE = 12288
+# Hard ceiling for small-context TF backends (tf-qwen38 @ 32k).
+SMALL_CONTEXT_COMPLETION_CAP = 8192
+SMALL_CONTEXT_THRESHOLD = 65536
+
 TENSORFOLD_MODELS = frozenset(
     {
         "omlx-qwen36",
@@ -106,8 +127,31 @@ def _strip_unsupported_tools_in(obj: Any) -> Any:
     return obj
 
 
+def _context_limit_for_model(model: str) -> int:
+    if model in MODEL_CONTEXT_LIMITS:
+        return MODEL_CONTEXT_LIMITS[model]
+    base = model.split("/")[-1] if model else ""
+    return MODEL_CONTEXT_LIMITS.get(base, DEFAULT_CONTEXT_LIMIT)
+
+
+def _completion_cap_for_model(model: str) -> int:
+    """Max completion tokens that fit with a large unknown agent prompt."""
+    ctx = _context_limit_for_model(model)
+    # Keep at least MIN_PROMPT_RESERVE for prompt; never exceed global max.
+    room = max(1024, ctx - MIN_PROMPT_RESERVE)
+    # Also never take more than half the window when context is small.
+    room = min(room, max(1024, ctx // 2))
+    cap = min(MAX_COMPLETION_TOKENS, room)
+    # 32k backends: dsh agent prompts (tools+AGENTS+history) often ~15–20k.
+    # Cap completions at 8k so prompt+max_tokens stays under context.
+    if ctx < SMALL_CONTEXT_THRESHOLD:
+        cap = min(cap, SMALL_CONTEXT_COMPLETION_CAP)
+    return cap
+
+
 def _clamp_max_tokens(data: dict) -> None:
     model = str(data.get("model") or "")
+    cap = _completion_cap_for_model(model) if _is_tensorfold_model(model) else MAX_COMPLETION_TOKENS
     for key in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
         if key not in data or data[key] is None:
             continue
@@ -115,15 +159,15 @@ def _clamp_max_tokens(data: dict) -> None:
             val = int(data[key])
         except (TypeError, ValueError):
             continue
-        if val > MAX_COMPLETION_TOKENS:
-            data[key] = MAX_COMPLETION_TOKENS
-    if model in TENSORFOLD_MODELS:
+        if val > cap:
+            data[key] = cap
+    if _is_tensorfold_model(model):
         if (
             data.get("max_tokens") is None
             and data.get("max_completion_tokens") is None
             and data.get("max_output_tokens") is None
         ):
-            data["max_tokens"] = min(8192, MAX_COMPLETION_TOKENS)
+            data["max_tokens"] = min(8192, cap)
 
 
 def _is_tensorfold_model(model: str) -> bool:
@@ -247,12 +291,44 @@ def _install_responses_stream_sanitizer() -> None:
         if pending:
             return pending.popleft()
 
+        def _ensure_terminal() -> None:
+            """dsh requires message_stop; TF/LiteLLM errors often end the iterator early."""
+            if getattr(self, "_dsh_forced_terminal", False):
+                return
+            if not getattr(self, "_sent_message_start", False):
+                return
+            if getattr(self, "_sent_message_stop", False):
+                return
+            for c in san.flush_all():
+                pending.append(c)
+            pending.append(
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                    "usage": {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                    },
+                }
+            )
+            pending.append({"type": "message_stop"})
+            self._dsh_forced_terminal = True
+            self._sent_message_stop = True
+
         while True:
             try:
                 chunk = await _orig_anext(self)
             except StopAsyncIteration:
                 for c in san.flush_all():
                     pending.append(c)
+                _ensure_terminal()
+                if pending:
+                    return pending.popleft()
+                raise
+            except Exception:
+                for c in san.flush_all():
+                    pending.append(c)
+                _ensure_terminal()
                 if pending:
                     return pending.popleft()
                 raise
@@ -263,6 +339,8 @@ def _install_responses_stream_sanitizer() -> None:
             first, *rest = emitted
             for c in rest:
                 pending.append(c)
+            if isinstance(first, dict) and first.get("type") == "message_stop":
+                self._sent_message_stop = True
             return first
 
     AnthropicResponsesStreamWrapper.__anext__ = _sanitized_anext  # type: ignore[method-assign]

@@ -206,6 +206,7 @@ docker compose build
 | Plugin install “no space” on /tmp | `/tmp` is 64MB tmpfs; caches use `/data/tmp` via `TMPDIR` — re-seed or `mkdir -p` under volume; do not fill host `/tmp` |
 | `web_search_preview` / tools error | LiteLLM hook strips built-in OpenAI tools; recreate litellm: `docker compose up -d --force-recreate litellm` |
 | `MALFORMED_RESPONSE` / `delta/stop without an open block` | LiteLLM Responses→Anthropic path closed a tool block before late arg deltas. Fixed in `litellm_hooks.py` stream sanitizer — recreate litellm after pull |
+| `STREAM_CLOSED` / ended before `message_stop` | Usually TF rejected the request (prompt + max_tokens over context) and LiteLLM aborted SSE mid-stream. Hooks now clamp max_tokens per model context and synthesize `message_stop` on abort — recreate litellm after pull. Prefer `omlx-qwen36` (131k ctx) for large agent turns; `tf-qwen38` is 32k |
 
 ## More detail
 
