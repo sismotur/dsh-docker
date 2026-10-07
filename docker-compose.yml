@@ -51,6 +51,15 @@ x-dsh-base: &dsh-base
     # /tmp is noexec, which breaks dlopen ("failed to map segment"). Disable
     # the cache so prebuilds load from the executable rootfs under /usr/local.
     - NARB_DISABLE_NATIVE_CACHE=1
+    # Installers (pnpm/npm) and many tools default to os.tmpdir()=/tmp.
+    # /tmp is a 64MB noexec tmpfs (hardening). Point scratch + package caches
+    # at the writable dsh-home volume so plugin installs do not ENOSPC.
+    - TMPDIR=/data/tmp
+    - TMP=/data/tmp
+    - TEMP=/data/tmp
+    - npm_config_cache=/data/.npm
+    - XDG_CACHE_HOME=/data/cache
+    # PNPM_HOME is also set in the image ENV to /data/.pnpm
 
 services:
   # LiteLLM proxy: routes dsh -> TensorFold (:8421, ~/models/tensorfold) primary,

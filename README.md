@@ -66,6 +66,8 @@ container with only one workspace directory exposed.
 
 **Note (dsh ≥ 0.2):** native Node addons must not be cached under the `noexec` `/tmp`. This compose sets `NARB_DISABLE_NATIVE_CACHE=1` so prebuilds load from `/usr/local`.
 
+**Install caches:** `pnpm`/`npm` scratch uses `TMPDIR=/data/tmp` and `npm_config_cache=/data/.npm` on the `dsh-home` volume. The 64 MB `/tmp` tmpfs stays small and `noexec` for hardening.
+
 
 Each control below is set in `docker-compose.yml` (runtime) or `Dockerfile`
 (build). The verified effect is what was observed during validation.

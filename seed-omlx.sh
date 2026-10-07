@@ -48,8 +48,12 @@ fi
 
 echo "seeded $AGENTS_OUT (public packs: $_pub_n, private packs: $_priv_n, lines: $(wc -l < "$AGENTS_OUT"))"
 
-# pnpm store on the writable volume (rootfs is read-only at runtime).
-mkdir -p "${PNPM_HOME:-$DSH_HOME/.pnpm}"
+# Writable scratch + package caches on the volume (not the 64MB noexec /tmp).
+mkdir -p \
+  "${PNPM_HOME:-$DSH_HOME/.pnpm}" \
+  "$DSH_HOME/tmp" \
+  "$DSH_HOME/.npm" \
+  "$DSH_HOME/cache"
 
 # Default model: smart-router -> TensorFold. Saved settings.yaml overrides cordis.
 cat > "$DSH_HOME/settings.yaml" << 'SEOF'

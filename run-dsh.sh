@@ -209,6 +209,10 @@ case "${1:-}" in
   plugin)
     shift
     profile="$1"; shift
+    # Ensure /data scratch dirs exist (seed also creates them). Plugin installs
+    # use TMPDIR=/data/tmp via compose so pnpm does not fill the 64MB /tmp tmpfs.
+    docker compose run --rm --entrypoint sh dsh-headless -c \
+      'mkdir -p /data/tmp /data/.npm /data/cache /data/.pnpm' >/dev/null 2>&1 || true
     docker compose run --rm dsh-headless plugin --profile "$profile" "$@"
     ;;
   seed)
@@ -227,6 +231,10 @@ case "${1:-}" in
     fi
     if [ -d "$SCRIPT_DIR/patches/headless" ]; then
       _seed_vols="$_seed_vols -v $SCRIPT_DIR/patches/headless:/opt/dsh-patches/headless:ro"
+    fi
+    # Prefer host seed script so volume-layout fixes apply without image rebuild.
+    if [ -f "$SCRIPT_DIR/seed-omlx.sh" ]; then
+      _seed_vols="$_seed_vols -v $SCRIPT_DIR/seed-omlx.sh:/usr/local/bin/seed-omlx.sh:ro"
     fi
     # shellcheck disable=SC2086
     docker compose run --rm $_seed_vols --entrypoint /usr/local/bin/seed-omlx.sh dsh-headless
