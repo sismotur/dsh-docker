@@ -63,6 +63,10 @@ host_runtime_mounts() {
   if [ -f "$SCRIPT_DIR/dsh-aliases.sh" ]; then
     set -- "$@" -v "$SCRIPT_DIR/dsh-aliases.sh:/etc/profile.d/dsh-aliases.sh:ro"
   fi
+  # dsh-shell interactive terminal only sources ~/.bashrc (not profile.d).
+  if [ -f "$SCRIPT_DIR/home-bashrc.sh" ]; then
+    set -- "$@" -v "$SCRIPT_DIR/home-bashrc.sh:/home/node/.bashrc:ro"
+  fi
   if [ -d "$SCRIPT_DIR/plugins" ]; then
     set -- "$@" -v "$SCRIPT_DIR/plugins:/opt/dsh-plugins:ro"
   fi

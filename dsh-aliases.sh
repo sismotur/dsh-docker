@@ -71,27 +71,50 @@ find_files_regex() {
 # PROMPT — show the real project name, not /workspace
 #############################
 
-# The dsh-better-sidebar terminal spawns `bash -l` in /workspace, which is a
-# bind-mount of the real project folder. run-dsh.sh exports WORKSPACE_NAME
-# (the host folder's basename) so the prompt can show the actual project name
-# instead of the generic "workspace" mount point.
+# Mount point is always /workspace. run-dsh.sh exports WORKSPACE_NAME as the
+# host folder basename (e.g. inventrip_api).
+#
+# UI terminal (dsh-shell): bash --rcfile /tmp/dsh-shell-*/bashrc -i which only
+# sources ~/.bashrc. home-bashrc.sh is bind-mounted to /home/node/.bashrc and
+# sources this file → aliases + project prompt.
+#
+# Agent PTY (dsh-terminal-bash): sets DSH_PTY_SESSION_ID and forces readiness
+# via OSC 133 + exact tail "dsh> ". Detect that env and keep the controlled
+# tail while printing project name on the previous line.
+__dsh_prompt_dir() {
+  if [ "$PWD" = /workspace ]; then
+    printf '%s' "${WORKSPACE_NAME:-workspace}"
+  elif [ "${PWD#/workspace/}" != "$PWD" ]; then
+    printf '%s' "${WORKSPACE_NAME:-workspace}/${PWD#/workspace/}"
+  else
+    printf '%s' "${PWD/#$HOME/~}"
+  fi
+}
+
 __dsh_prompt() {
   local exit_code=$?
-  local dir
-  if [ "$PWD" = /workspace ]; then
-    dir="${WORKSPACE_NAME:-workspace}"
-  elif [ "${PWD#/workspace/}" != "$PWD" ]; then
-    dir="${WORKSPACE_NAME:-workspace}/${PWD#/workspace/}"
+  local dir branch
+  dir=$(__dsh_prompt_dir)
+  branch=$(git --no-pager symbolic-ref --short HEAD 2>/dev/null || true)
+
+  # Only agent terminal-bash sets DSH_PTY_SESSION_ID. UI dsh-shell does not.
+  if [ -n "${DSH_PTY_SESSION_ID:-}" ]; then
+    # Project + branch above the controlled prompt (not in promptTail).
+    printf '\033[36m%s\033[0m' "$dir"
+    if [ -n "$branch" ]; then
+      printf ' \033[33m(%s)\033[0m' "$branch"
+    fi
+    printf '\n'
+    # dsh-terminal-bash readiness: OSC 133;D then exact printable "dsh> "
+    printf '\033]133;D;%s\007' "$exit_code"
+    PS1='dsh> '
   else
-    dir="${PWD/#$HOME/~}"
+    local git_part=""
+    if [ -n "$branch" ]; then
+      git_part=" \[\e[33m\]($branch)\[\e[0m\]"
+    fi
+    PS1="\[\e[36m\]$dir\[\e[0m\]$git_part\$ "
   fi
-  local branch
-  branch=$(git --no-pager symbolic-ref --short HEAD 2>/dev/null)
-  local git_part=""
-  if [ -n "$branch" ]; then
-    git_part=" \[\e[33m\]($branch)\[\e[0m\]"
-  fi
-  PS1="\[\e[36m\]$dir\[\e[0m\]$git_part\$ "
   return $exit_code
 }
 PROMPT_COMMAND=__dsh_prompt

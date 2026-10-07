@@ -176,8 +176,11 @@ Pass criteria: `OK stream sanitizer regression`.
 Pass criteria: headless prints an answer; web UI loads with the token URL.
 Agent turns with tools must not fail with `MALFORMED_RESPONSE` /
 `delta/stop without an open block` (LiteLLM hooks defer block stops).
-UI workspace title and terminal prompt show the **project folder name**
-(e.g. `inventrip_api`), not the generic mount label `workspace`.
+UI workspace title shows the **project folder name** (e.g. `inventrip_api`),
+not the generic mount label `workspace`.
+Interactive terminal (dsh-shell) sources `~/.bashrc` → `home-bashrc.sh` →
+`dsh-aliases.sh`, so the prompt shows `inventrip_api (branch)$` and aliases
+like `gs` work. Agent terminal-bash keeps controlled `dsh> ` readiness.
 Composer footer shows `inventrip_api @ dev-app ---` then stats
 (plugin `dsh-git-branch-dock`; project git branch, not dsh-docker).
 

@@ -60,6 +60,15 @@
   disabled: true
 - id: web-search-deepseek
   disabled: true
+# dsh-terminal-bash defaults to bash --noprofile --norc (no aliases/prompt).
+# Load dsh-aliases via --rcfile so the PTY shows WORKSPACE_NAME (inventrip_api)
+# while keeping OSC 133 + trailing "dsh> " for readiness.
+- id: terminal-bash
+  config:
+    shellArgs:
+      - --rcfile
+      - /etc/profile.d/dsh-aliases.sh
+      - -i
 # Match this Warp instance's terminal font size (appearance.text.font_size in
 # ~/.warp/settings.toml). DSH only exposes content font size (12-17px); it has
 # no font-family setting, so the font type itself cannot be matched here.

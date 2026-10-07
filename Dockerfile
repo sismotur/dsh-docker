@@ -70,11 +70,11 @@ COPY register-workspace.sh /usr/local/bin/register-workspace.sh
 COPY web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
 COPY enable-terminal.sh /usr/local/bin/enable-terminal.sh
 RUN chmod +x /usr/local/bin/seed-omlx.sh /usr/local/bin/register-workspace.sh /usr/local/bin/web-entrypoint.sh /usr/local/bin/enable-terminal.sh
-# Terminal aliases for the dsh-better-sidebar terminal tab. Sourced by
-# /etc/profile -> /etc/profile.d/*.sh for bash login shells (the terminal
-# spawns `bash -l`); not sourced by dsh's non-login bash tool, so they only
-# apply to the interactive terminal.
+# Terminal aliases + project prompt. dsh-shell UI terminal sources ~/.bashrc
+# only (generated --rcfile); profile.d is for login shells / explicit source.
 COPY dsh-aliases.sh /etc/profile.d/dsh-aliases.sh
+COPY home-bashrc.sh /home/node/.bashrc
+RUN chown node:node /home/node/.bashrc
 # Prebuilt node-pty binary from the builder stage. Injected into the
 # dsh-better-sidebar plugin's node-pty by enable-terminal.sh.
 COPY --from=builder /opt/pty-build/node_modules/node-pty/build/Release/pty.node /opt/prebuilds/node-pty/pty.node

@@ -60,6 +60,13 @@
   disabled: true
 - id: web-search-deepseek
   disabled: true
+# Same as web: PTY bash must --rcfile aliases so project name is visible.
+- id: terminal-bash
+  config:
+    shellArgs:
+      - --rcfile
+      - /etc/profile.d/dsh-aliases.sh
+      - -i
 # MCP memory server: knowledge-graph memory across sessions. Pre-installed in
 # the image (no npx, no runtime network). The memory file persists on the
 # DSH_HOME volume at /data/memory.jsonl. Tools are exposed as mcp__memory__*.
