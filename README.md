@@ -17,6 +17,9 @@ container instead of bare-metal on the host.
 > rather than tracking `latest`. Docs:
 > [deepseek-harness documentation](https://deepseek-harness.github.io/deepseek-harness/).
 
+**Human quick guide:** see [USAGE.md](USAGE.md) for setup, everyday `./run-dsh.sh` commands, and how to test the stack.
+
+
 
 ## Table of contents
 
@@ -48,6 +51,7 @@ container instead of bare-metal on the host.
 - [Security audit](#security-audit)
 - [Security invariants](#security-invariants)
 - [Validating hardening](#validating-hardening)
+- [Usage guide](USAGE.md)
 - [License and attribution](#license-and-attribution)
 - [Files](#files)
 
