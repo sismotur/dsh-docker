@@ -91,8 +91,38 @@ resolve_project() {
   printf '%s' "$1"
 }
 
+# Ensure LiteLLM + both TensorFold backends before dsh starts.
+# smart-router defaults to Nemotron (fast); Qwen is the alternate quality model.
+ensure_tensorfold_backends() {
+  _uid=$(id -u)
+  for _label in dev.tensorfold.tf-nemotron dev.tensorfold.tf-qwen38; do
+    launchctl enable "gui/${_uid}/${_label}" 2>/dev/null || true
+    if ! launchctl print "gui/${_uid}/${_label}" >/dev/null 2>&1; then
+      if [ -f "$HOME/Library/LaunchAgents/${_label}.plist" ]; then
+        launchctl bootstrap "gui/${_uid}" "$HOME/Library/LaunchAgents/${_label}.plist" 2>/dev/null || true
+      fi
+    fi
+    launchctl kickstart "gui/${_uid}/${_label}" 2>/dev/null || true
+  done
+  # Wait briefly; model load can take minutes on cold start — do not block forever.
+  _tf_deadline=$((SECONDS + 180))
+  while (( SECONDS < _tf_deadline )); do
+    _n=0
+    curl -fsS -m 2 http://127.0.0.1:8425/v1/models >/dev/null 2>&1 && _n=$((_n + 1))
+    curl -fsS -m 2 http://127.0.0.1:8423/v1/models >/dev/null 2>&1 && _n=$((_n + 1))
+    if [ "$_n" -eq 2 ]; then
+      echo "[dsh] TensorFold backends ready (:8425 Nemotron default, :8423 Qwen)." >&2
+      return 0
+    fi
+    sleep 3
+  done
+  echo "[dsh] warning: TensorFold not fully ready after 180s (Nemotron :8425 / Qwen :8423)." >&2
+  return 0
+}
+
 # Ensure the LiteLLM router is running before dsh starts.
 ensure_router() {
+  ensure_tensorfold_backends
   docker compose up -d litellm 2>&1 | grep -v "gcloud\|docker-helper\|WARN\|credential" || true
 }
 
@@ -102,22 +132,26 @@ slugify() {
 }
 
 # Fail-fast checks before an unattended headless job: a missing API key is a
-# deterministic failure for every request, so it aborts. Primary backend is
-# TensorFold (:8421, models under ~/models/tensorfold). oMLX (:8000) is optional.
-# Catches a broken stack in ~1s instead of after the container starts and the
-# job fails deep in a request chain.
+# deterministic failure for every request, so it aborts. Primary backends are
+# TensorFold native (:8425 Nemotron default, :8423 Qwen3.8). At least one must
+# be up. Catches a broken stack in ~1s instead of after the container starts
+# and the job fails deep in a request chain.
 preflight_headless() {
   _pf_ok=1
   if [ ! -f .env ] || ! grep -qE '^DEEPSEEK_API_KEY=.+' .env || grep -q '^DEEPSEEK_API_KEY=changeme$' .env; then
     echo "[preflight] DEEPSEEK_API_KEY not set in .env (copy .env.example and edit it)." >&2
     _pf_ok=0
   fi
-  if ! curl -fsS -m 3 http://127.0.0.1:8421/v1/models >/dev/null 2>&1; then
-    echo "[preflight] warning: TensorFold not reachable at 127.0.0.1:8421 (service omlx-qwen36 / ~/models/tensorfold)." >&2
+  ensure_tensorfold_backends
+  _tf_n=0
+  curl -fsS -m 3 http://127.0.0.1:8425/v1/models >/dev/null 2>&1 && _tf_n=$((_tf_n + 1))
+  curl -fsS -m 3 http://127.0.0.1:8423/v1/models >/dev/null 2>&1 && _tf_n=$((_tf_n + 1))
+  if [ "$_tf_n" -lt 1 ]; then
+    echo "[preflight] TensorFold not reachable (need :8425 tf-nemotron; :8423 tf-qwen38 also expected)." >&2
+    echo "[preflight] See ~/models/tensorfold/README.md" >&2
     _pf_ok=0
-  fi
-  if ! curl -fsS -m 3 http://127.0.0.1:8000/v1/models >/dev/null 2>&1; then
-    echo "[preflight] note: oMLX at 127.0.0.1:8000 down (optional; VL/non-TF models unavailable)." >&2
+  elif [ "$_tf_n" -lt 2 ]; then
+    echo "[preflight] warning: only one TensorFold backend is up (want both Nemotron+Qwen)." >&2
   fi
   [ "$_pf_ok" = 1 ] || { echo "[preflight] aborting." >&2; return 1; }
   return 0
@@ -398,42 +432,26 @@ case "${1:-}" in
     else
       echo "NOT reachable -- start with: docker compose up -d litellm"
     fi
-    printf 'TensorFold fast (127.0.0.1:8421): '
-    if TF_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8421/v1/models 2>/dev/null); then
-      echo "reachable  (models root: $HOME/models/tensorfold)"
-      if command -v jq >/dev/null 2>&1; then
-        printf '%s' "$TF_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
-      fi
-    else
-      echo "NOT reachable -- tensorfold service start omlx-qwen36"
-    fi
-    printf 'TensorFold Qwen3.8 (:8423):      '
-    if TF38_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8423/v1/models 2>/dev/null); then
-      echo "reachable  (tf-qwen38 + DFlash2)"
-      if command -v jq >/dev/null 2>&1; then
-        printf '%s' "$TF38_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
-      fi
-    else
-      echo "down -- tensorfold service start tf-qwen38"
-    fi
     printf 'TensorFold Nemotron (:8425):     '
     if TFN_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8425/v1/models 2>/dev/null); then
-      echo "reachable  (tf-nemotron + MTP)"
+      echo "reachable  (default / smart-router)"
       if command -v jq >/dev/null 2>&1; then
         printf '%s' "$TFN_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
       fi
     else
-      echo "down -- tensorfold service start tf-nemotron"
+      echo "NOT reachable -- launchctl kickstart gui/$(id -u)/dev.tensorfold.tf-nemotron"
     fi
-    printf 'oMLX server (127.0.0.1:8000):     '
-    if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
-      echo "reachable (optional)"
+    printf 'TensorFold Qwen3.8 (:8423):      '
+    if TF38_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8423/v1/models 2>/dev/null); then
+      echo "reachable  (quality + DFlash2)"
       if command -v jq >/dev/null 2>&1; then
-        printf '%s' "$OMLX_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
+        printf '%s' "$TF38_MODELS" | jq -r '.data[]?.id' | sed 's/^/    - /'
       fi
     else
-      echo "down (optional)"
+      echo "down -- launchctl kickstart gui/$(id -u)/dev.tensorfold.tf-qwen38"
     fi
+    printf 'models root:                     '
+    echo "$HOME/models/tensorfold"
     printf 'DEEPSEEK_API_KEY:                 '
     if [ -f .env ] && grep -qE '^DEEPSEEK_API_KEY=.+' .env && ! grep -q '^DEEPSEEK_API_KEY=changeme$' .env; then
       echo "set"
@@ -554,32 +572,35 @@ case "${1:-}" in
       _dr_p WARN 'litellm reachable' 'run: docker compose up -d litellm'
       _dr_warn=$((_dr_warn + 1))
     fi
-    if TF_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8421/v1/models 2>/dev/null); then
-      _dr_p OK 'TensorFold reachable'
+    _tf_any=0
+    _tf_ids=""
+    if TFN_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8425/v1/models 2>/dev/null); then
+      _tf_any=1
+      _dr_p OK 'TensorFold Nemotron :8425'
       if command -v jq >/dev/null 2>&1; then
-        _dr_n=$(printf '%s' "$TF_MODELS" | jq -r '.data[]?.id' 2>/dev/null | grep -c . || true)
-        if [ "$_dr_n" -gt 0 ] 2>/dev/null; then
-          _dr_p OK 'TensorFold models' "$_dr_n available ($HOME/models/tensorfold)"
-        else
-          _dr_p WARN 'TensorFold models' 'none listed'
-          _dr_warn=$((_dr_warn + 1))
-        fi
-      else
-        _dr_p OK 'TensorFold models' "root $HOME/models/tensorfold"
+        _tf_ids=$(printf '%s' "$TFN_MODELS" | jq -r '.data[]?.id' 2>/dev/null | tr '
+' ' ')
       fi
     else
-      _dr_p FAIL 'TensorFold reachable' 'tensorfold service start omlx-qwen36'
-      _dr_fail=$((_dr_fail + 1))
-    fi
-    if OMLX_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8000/v1/models 2>/dev/null); then
-      _dr_p OK 'oMLX reachable (optional)'
-      if command -v jq >/dev/null 2>&1; then
-        _dr_n=$(printf '%s' "$OMLX_MODELS" | jq -r '.data[]?.id' 2>/dev/null | grep -c . || true)
-        _dr_p OK 'oMLX models' "$_dr_n available"
-      fi
-    else
-      _dr_p WARN 'oMLX reachable' 'optional; VL/non-TF models need oMLX :8000'
+      _dr_p WARN 'TensorFold Nemotron :8425' 'default smart-router backend down'
       _dr_warn=$((_dr_warn + 1))
+    fi
+    if TF38_MODELS=$(curl -fsS -m 3 http://127.0.0.1:8423/v1/models 2>/dev/null); then
+      _tf_any=1
+      _dr_p OK 'TensorFold Qwen3.8 :8423'
+      if command -v jq >/dev/null 2>&1; then
+        _tf_ids="$_tf_ids $(printf '%s' "$TF38_MODELS" | jq -r '.data[]?.id' 2>/dev/null | tr '
+' ' ')"
+      fi
+    else
+      _dr_p WARN 'TensorFold Qwen3.8 :8423' 'quality backend down'
+      _dr_warn=$((_dr_warn + 1))
+    fi
+    if [ "$_tf_any" = 1 ]; then
+      _dr_p OK 'TensorFold reachable' "$_tf_ids"
+    else
+      _dr_p FAIL 'TensorFold reachable' 'need tf-nemotron :8425 and/or tf-qwen38 :8423'
+      _dr_fail=$((_dr_fail + 1))
     fi
     echo
     if [ "$_dr_fail" -gt 0 ]; then

@@ -24,33 +24,28 @@ MAX_COMPLETION_TOKENS = 24576
 # prompt_tokens + max_tokens > context makes TF reject and LiteLLM aborts
 # the Anthropic SSE without message_stop → dsh STREAM_CLOSED.
 MODEL_CONTEXT_LIMITS: dict[str, int] = {
-    "omlx-qwen36": 131072,
-    "Qwen3.6-35B-A3B-4bit": 131072,
-    "qwen36-35b-4bit": 131072,
-    "tf-qwen38": 32768,
-    "Qwen3.8-27B-OptiQ-4bit": 32768,
-    "qwen38-27b-optiq-4bit": 32768,
-    "tf-nemotron": 65536,
-    "Nemotron-3.5-Lightning-30B-A3B-4bit": 65536,
-    "nemotron35-lightning-30b-a3b-4bit": 65536,
-    "smart-router": 131072,
+    # Live TensorFold native 1.1.1 backends only.
+    "tf-qwen38": 131072,
+    "tf-nemotron": 131072,
+    "Nemotron-3.5-Lightning-30B-A3B-4bit": 131072,
+    "nemotron35-lightning-30b-a3b-4bit": 131072,
+    "smart-router": 131072,  # routes to tf-nemotron
 }
 DEFAULT_CONTEXT_LIMIT = 32768
 # Floor reserved for prompt when token count unknown (tools + AGENTS.md).
 # Agent turns on 32k models often land 12–20k prompt tokens; leave headroom.
 MIN_PROMPT_RESERVE = 12288
 # Hard ceiling for small-context TF backends (tf-qwen38 @ 32k).
+# Mid/large (65k–131k): still leave most of the window for agent prompts
+# (tools + history + file reads); never default to half of 131k as completion.
 SMALL_CONTEXT_COMPLETION_CAP = 8192
 SMALL_CONTEXT_THRESHOLD = 65536
+# Agent turns on 131k often use 20–60k prompt; keep completion modest.
+LARGE_CONTEXT_COMPLETION_CAP = 16384
 
 TENSORFOLD_MODELS = frozenset(
     {
-        "omlx-qwen36",
-        "Qwen3.6-35B-A3B-4bit",
-        "qwen36-35b-4bit",
         "tf-qwen38",
-        "Qwen3.8-27B-OptiQ-4bit",
-        "qwen38-27b-optiq-4bit",
         "tf-nemotron",
         "Nemotron-3.5-Lightning-30B-A3B-4bit",
         "nemotron35-lightning-30b-a3b-4bit",
@@ -145,13 +140,16 @@ def _completion_cap_for_model(model: str) -> int:
     ctx = _context_limit_for_model(model)
     # Keep at least MIN_PROMPT_RESERVE for prompt; never exceed global max.
     room = max(1024, ctx - MIN_PROMPT_RESERVE)
-    # Also never take more than half the window when context is small.
+    # Never take more than half the window (unknown prompt size).
     room = min(room, max(1024, ctx // 2))
     cap = min(MAX_COMPLETION_TOKENS, room)
-    # 32k backends: dsh agent prompts (tools+AGENTS+history) often ~15–20k.
-    # Cap completions at 8k so prompt+max_tokens stays under context.
+    # 32k backends: agent prompts often ~15–20k → hard 8k completion.
     if ctx < SMALL_CONTEXT_THRESHOLD:
         cap = min(cap, SMALL_CONTEXT_COMPLETION_CAP)
+    else:
+        # 65k/131k: live failure was 46k prompt + 24k max_tokens on 65k.
+        # Cap completions so large agent prompts still fit.
+        cap = min(cap, LARGE_CONTEXT_COMPLETION_CAP)
     return cap
 
 

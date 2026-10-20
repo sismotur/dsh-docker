@@ -1,17 +1,13 @@
-## Local LLM — TensorFold (example)
+## Local LLM — TensorFold
 
-<!-- Copy to agents/private/10-tensorfold-local.md and fill real URLs/models.
-     Example only — not seeded. -->
-
-Primary local inference is **TensorFold** (OpenAI-compatible).
+Both backends start with dsh (and at login via LaunchAgents).
 
 | Role | URL | Model id |
 | --- | --- | --- |
-| Fast | `http://127.0.0.1:PORT_FAST/v1` | `YOUR_FAST_MODEL_ID` |
-| Nemotron (optional) | `http://127.0.0.1:PORT_NEMO/v1` | `YOUR_NEMO_MODEL_ID` |
-| Quality (optional) | `http://127.0.0.1:PORT_QUALITY/v1` | `YOUR_QUALITY_MODEL_ID` |
+| **Default / fastest** (`smart-router`) | `http://127.0.0.1:8425/v1` | `tf-nemotron` |
+| Alternate quality | `http://127.0.0.1:8423/v1` | `tf-qwen38` |
 
-dsh reaches models via LiteLLM (`http://litellm:4000/v1`). Default router
-model: `smart-router` → fast TensorFold backend.
+Default agent model: **`smart-router` → Nemotron**.
+Pick `tf-qwen38` in the UI when you want the Qwen path (131k + DFlash2).
 
-Do not default to Ollama or other local servers unless the user asks.
+Docs: `~/models/tensorfold/README.md`.

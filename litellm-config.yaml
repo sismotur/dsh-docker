@@ -1,49 +1,12 @@
-# LiteLLM proxy config: routes dsh requests to local backends.
-# dsh -> http://litellm:4000/v1
+# LiteLLM proxy config for dsh-docker
+# dsh -> litellm:4000 -> TensorFold native on host.docker.internal
 #
-# Primary backend: TensorFold on the host (OpenAI-compatible).
-#   models root: ~/models/tensorfold  (symlinks into ~/.omlx/models / HF cache)
-#   fast:     omlx-qwen36  @ :8421 (--context 131072)
-#   nemotron: tf-nemotron  @ :8425 (Nemotron 3.5 Lightning + MTP, --context 65536)
-#   quality:  tf-qwen38    @ :8423 (Qwen3.8-27B + DFlash2, --context 32768)
-# Optional: oMLX on :8000 for checkpoints TensorFold cannot serve (e.g. VL).
+# Live backends:
+#   tf-nemotron :8425  Nemotron 3.5 Lightning (default / smart-router)
+#   tf-qwen38   :8423  TensorFold/Qwen3.8-27B-MLX-4bit + DFlash2
+# Thinking off on both. API key: DEEPSEEK_API_KEY (any local value).
 
 model_list:
-  # --- TensorFold (primary) ---
-  # Live service model id is always `omlx-qwen36` while that LaunchAgent runs.
-  # Extra model_name aliases keep the dsh UI / old selections working.
-  - model_name: omlx-qwen36
-    litellm_params:
-      model: openai/omlx-qwen36
-      api_base: http://host.docker.internal:8421/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-      # Qwen thinking off by default for agent tool loops (faster, cleaner).
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
-
-  - model_name: Qwen3.6-35B-A3B-4bit
-    litellm_params:
-      model: openai/omlx-qwen36
-      api_base: http://host.docker.internal:8421/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
-
-  - model_name: qwen36-35b-4bit
-    litellm_params:
-      model: openai/omlx-qwen36
-      api_base: http://host.docker.internal:8421/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
-
-  # --- TensorFold Qwen3.8 dense + DFlash2 (quality, ~30 tok/s) ---
   - model_name: tf-qwen38
     litellm_params:
       model: openai/tf-qwen38
@@ -54,27 +17,6 @@ model_list:
         chat_template_kwargs:
           enable_thinking: false
 
-  - model_name: Qwen3.8-27B-OptiQ-4bit
-    litellm_params:
-      model: openai/tf-qwen38
-      api_base: http://host.docker.internal:8423/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
-
-  - model_name: qwen38-27b-optiq-4bit
-    litellm_params:
-      model: openai/tf-qwen38
-      api_base: http://host.docker.internal:8423/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
-
-  # --- TensorFold Nemotron 3.5 Lightning + MTP (fast MoE) ---
   - model_name: tf-nemotron
     litellm_params:
       model: openai/tf-nemotron
@@ -105,70 +47,38 @@ model_list:
         chat_template_kwargs:
           enable_thinking: false
 
-  # --- oMLX optional (host :8000) — only if oMLX is running ---
-
-  - model_name: DeepSeek-V4-Flash-0731-2.4bit-mixed
-    litellm_params:
-      model: openai/DeepSeek-V4-Flash-0731-2.4bit-mixed
-      api_base: http://host.docker.internal:8000/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-
-  - model_name: Qwen3-VL-30B-A3B-Instruct-4bit
-    litellm_params:
-      model: openai/Qwen3-VL-30B-A3B-Instruct-4bit
-      api_base: http://host.docker.internal:8000/v1
-      api_key: os.environ/DEEPSEEK_API_KEY
-      drop_params: true
-
-  # --- Auto router (default) ---
-  # Prefer TensorFold Qwen for all tiers while TF is the active coding backend.
-  # VL stays selectable manually when oMLX is up.
   - model_name: smart-router
     litellm_params:
       model: auto_router/complexity_router
       complexity_router_config:
         tiers:
-          SIMPLE: omlx-qwen36
-          MEDIUM: omlx-qwen36
-          COMPLEX: omlx-qwen36
-          REASONING: omlx-qwen36
+          SIMPLE: tf-nemotron
+          MEDIUM: tf-nemotron
+          COMPLEX: tf-nemotron
+          REASONING: tf-nemotron
         classification_mode: user_turn
-      complexity_router_default_model: omlx-qwen36
+      complexity_router_default_model: tf-nemotron
 
 litellm_settings:
   num_retries: 2
   request_timeout: 300
-  # Clamp dsh max_tokens (often 256k) before TensorFold sees the request.
   callbacks:
     - litellm_hooks.proxy_handler_instance
   fallbacks:
     - smart-router:
-        - omlx-qwen36
-        - Qwen3.6-35B-A3B-4bit
-    - omlx-qwen36:
-        - Qwen3.6-35B-A3B-4bit
-    - Qwen3.6-35B-A3B-4bit:
-        - omlx-qwen36
-    - tf-qwen38:
-        - Qwen3.8-27B-OptiQ-4bit
-        - omlx-qwen36
-    - Qwen3.8-27B-OptiQ-4bit:
+        - tf-nemotron
         - tf-qwen38
-        - omlx-qwen36
-    - qwen38-27b-optiq-4bit:
-        - tf-qwen38
-        - omlx-qwen36
     - tf-nemotron:
         - Nemotron-3.5-Lightning-30B-A3B-4bit
-        - omlx-qwen36
+        - tf-qwen38
     - Nemotron-3.5-Lightning-30B-A3B-4bit:
         - tf-nemotron
-        - omlx-qwen36
+        - tf-qwen38
     - nemotron35-lightning-30b-a3b-4bit:
         - tf-nemotron
-        - omlx-qwen36
-    - DeepSeek-V4-Flash-0731-2.4bit-mixed:
-        - omlx-qwen36
-    - Qwen3-VL-30B-A3B-Instruct-4bit:
-        - omlx-qwen36
+        - tf-qwen38
+    - tf-qwen38:
+        - tf-nemotron
+
+general_settings:
+  master_key: os.environ/DEEPSEEK_API_KEY

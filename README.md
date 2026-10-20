@@ -852,7 +852,7 @@ dsh container  →  LiteLLM (port 4000)  →  oMLX (port 8000)  →  models
 |---|---|---|---|
 | SIMPLE | Qwen3-VL-30B-A3B-Instruct-4bit | 3B | Greetings, simple lookups |
 | MEDIUM | Qwen3-VL-30B-A3B-Instruct-4bit | 3B | Standard coding tasks |
-| COMPLEX | Qwen3.8-27B-OptiQ-4bit | 27B | Architecture, multi-file |
+| COMPLEX | Qwen3.8-27B-MLX-4bit | 27B | Architecture, multi-file |
 | REASONING | Qwen3.6-35B-A3B-4bit | 3B | Deep analysis (thinking mode) |
 
 The heuristic classifier is sub-millisecond (no extra model calls). Context-window
@@ -869,8 +869,8 @@ also advertised for manual per-session selection in the dsh UI.
 ### Fallbacks
 
 If a model fails, LiteLLM falls back: `smart-router` → `Qwen3-VL-30B-A3B`,
-`Qwen3-VL-30B-A3B` → `Qwen3.8-27B-OptiQ`, `Qwen3.8-27B-OptiQ` →
-`Qwen3-VL-30B-A3B`, `Qwen3.6-35B-A3B` → `Qwen3.8-27B-OptiQ`.
+`Qwen3-VL-30B-A3B` → `Qwen3.8-27B-MLX-4bit`, `Qwen3.8-27B-MLX-4bit` →
+`Qwen3-VL-30B-A3B`, `Qwen3.6-35B-A3B` → `Qwen3.8-27B-MLX-4bit`.
 
 ### Config
 
@@ -911,7 +911,7 @@ Models fixed (backup at `tokenizer_config.json.bak`):
 | Model | tool_parser_type | Status |
 |---|---|---|
 | Qwen3-VL-30B-A3B-Instruct-4bit | `qwen3_coder` | works (fix applied) |
-| Qwen3.8-27B-OptiQ-4bit | `qwen3_coder` | works (was already set) |
+| Qwen3.8-27B-MLX-4bit | `qwen3_coder` | works (was already set) |
 | Qwen3.6-35B-A3B-4bit | `qwen3_coder` | works (fix applied) |
 | Qwen3-Next-80B-A3B-Instruct-MLX-4bit | `qwen3_coder` | set (not yet verified) |
 

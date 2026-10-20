@@ -2,11 +2,10 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# LiteLLM router: dsh -> litellm:4000 -> TensorFold
-# (:8421 Qwen3.6, :8425 Nemotron, :8423 Qwen3.8),
-# oMLX (host :8000) optional for VL / non-TF checkpoints.
+# LiteLLM router: dsh -> litellm:4000 -> TensorFold native 1.1.1
+# (:8425 Nemotron default, :8423 Qwen3.8 quality).
 # Models root on host: ~/models/tensorfold
-# API key: DEEPSEEK_API_KEY (apiKeyEnv). TensorFold ignores it; oMLX may not.
+# API key: DEEPSEEK_API_KEY (apiKeyEnv). TensorFold ignores it.
 - id: llm-deepseek
   config:
     baseURL: http://litellm:4000/v1
@@ -14,41 +13,14 @@
     reasoningEffort: high
     models:
       - id: smart-router
-        name: smart-router (auto → TensorFold fast)
-        contextWindow: 131072
-      - id: omlx-qwen36
-        name: TensorFold Qwen3.6-35B-A3B-4bit (fast)
-        contextWindow: 131072
-      - id: Qwen3.6-35B-A3B-4bit
-        name: Qwen3.6-35B-A3B (TensorFold alias)
-        contextWindow: 131072
-      - id: qwen36-35b-4bit
-        name: qwen36-35b-4bit (TensorFold alias)
+        name: smart-router → Nemotron (131k, default)
         contextWindow: 131072
       - id: tf-nemotron
-        name: TensorFold Nemotron 3.5 Lightning + MTP
-        contextWindow: 65536
-      - id: Nemotron-3.5-Lightning-30B-A3B-4bit
-        name: Nemotron 3.5 Lightning (TensorFold alias)
-        contextWindow: 65536
-      - id: nemotron35-lightning-30b-a3b-4bit
-        name: nemotron35-lightning (TensorFold alias)
-        contextWindow: 65536
+        name: Nemotron 3.5 Lightning (:8425, 131k)
+        contextWindow: 131072
       - id: tf-qwen38
-        name: TensorFold Qwen3.8-27B + DFlash2 (quality)
-        contextWindow: 32768
-      - id: Qwen3.8-27B-OptiQ-4bit
-        name: Qwen3.8-27B-OptiQ (TensorFold + DFlash2)
-        contextWindow: 32768
-      - id: qwen38-27b-optiq-4bit
-        name: qwen38-27b-optiq-4bit (TensorFold alias)
-        contextWindow: 32768
-      - id: DeepSeek-V4-Flash-0731-2.4bit-mixed
-        name: DeepSeek-V4-Flash (oMLX, if up)
-        contextWindow: 1048576
-      - id: Qwen3-VL-30B-A3B-Instruct-4bit
-        name: Qwen3-VL-30B-A3B (oMLX vision, if up)
-        contextWindow: 262144
+        name: Qwen3.8-27B MLX-4bit + DFlash2 (:8423, 131k)
+        contextWindow: 131072
 - id: agent-default-model
   config:
     provider: deepseek-official
@@ -61,7 +33,7 @@
 - id: web-search-deepseek
   disabled: true
 # dsh-terminal-bash defaults to bash --noprofile --norc (no aliases/prompt).
-# Load dsh-aliases via --rcfile so the PTY shows WORKSPACE_NAME (inventrip_api)
+# Load dsh-aliases via --rcfile so the PTY shows WORKSPACE_NAME (project folder)
 # while keeping OSC 133 + trailing "dsh> " for readiness.
 - id: terminal-bash
   config:
